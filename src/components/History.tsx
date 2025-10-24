@@ -43,10 +43,15 @@ export const History: React.FC<ApiFetchProps> = ({ userId }) => {
             headers: headers,
         })
             .then(res => {
-                if (!res.ok) {
-                    throw new Error(`HTTP error! status: ${res.status}`);
+                console.log('Response status:', res.status, res.statusText);
+                return res.text();
+            })
+            .then(text => {
+                console.log('Response text:', text);
+                if (!text) {
+                    return [];
                 }
-                return res.json();
+                return JSON.parse(text);
             })
             .then(data => {
                 setExpenses(data);
