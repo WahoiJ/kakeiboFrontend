@@ -43,11 +43,12 @@ export const History: React.FC<ApiFetchProps> = ({ userId }) => {
             headers: headers,
         })
             .then(res => {
-                console.log('Response status:', res.status, res.statusText);
+                if (!res.ok) {
+                    throw new Error(`HTTP error! status: ${res.status}`);
+                }
                 return res.text();
             })
             .then(text => {
-                console.log('Response text:', text);
                 if (!text) {
                     return [];
                 }

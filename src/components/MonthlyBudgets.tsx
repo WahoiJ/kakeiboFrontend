@@ -42,11 +42,8 @@ export const MonthlyBudgets: React.FC<MonthlyBudgetsFormProps> = ({ onAddMonthly
                 method: 'GET',
                 headers: headers,
             });
-            console.log('Response status:', response.status, response.statusText);
-            const responseText = await response.text();
-            console.log('Response text:', responseText);
             if (response.ok) {
-                const data: MonthlyBudgets[] = JSON.parse(responseText);
+                const data: MonthlyBudgets[] = await response.json();
                 // 現在の月のavailableAmountを設定
                 const currentBudget = data.find(b => b.budget_month === budgetMonthString);
                 if (currentBudget) {
