@@ -3,9 +3,8 @@ import React, { useState } from "react";
 type DailyExpense = {
     expense_id: number;
     user_id: number;
-    expense_date: string;
+    expense_date: string | null;
     amount: number;
-    date: string;
 };
 
 interface ExpenseFormProps {
@@ -37,13 +36,23 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ userId, onAddExpense }
                     user_id: Number(userId),
                     expense_date: expenseDate,
                     amount: amount,
-                    date: today,
                 }),
             });
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
-            await response.json();
+            const newExpenseData = await response.json();
+
+            // onAddExpense を呼び出して新しい支出を追加
+            if (onAddExpense) {
+                const newExpense: DailyExpense = {
+                    expense_id: newExpenseData.expense_id || 0,
+                    user_id: Number(userId),
+                    expense_date: expenseDate,
+                    amount: amount,
+                };
+                onAddExpense(newExpense);
+            }
 
             // 2. 全出費を取得して合計を計算
             const expensesResponse = await fetch(`${baseUrl}/api/expenses?userId=${Number(userId)}`, {
