@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 interface LoginProps {
   setUserName: (userName: string | null) => void;
@@ -8,10 +8,11 @@ interface LoginProps {
   setUserId: (userId: string | null) => void;
 }
 
-const Login: React.FC<LoginProps> = ({ setUserName, setUserId }) => {
+const Login: React.FC<LoginProps> = ({ setUserName, setIsLoggedIn, setUserId }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,7 +28,8 @@ const Login: React.FC<LoginProps> = ({ setUserName, setUserId }) => {
       localStorage.setItem('user', JSON.stringify(response.data));
       setUserName(response.data.userName);
       setUserId(response.data.id.toString()); // IDをstringに変換
-      window.location.href = '/dashboard'; // 適宜変更
+      setIsLoggedIn(true);
+      navigate('/dashboard'); // React Router で遷移
     } catch (err: unknown) {
       if (err instanceof Error && 'response' in err) {
         const axiosErr = err as { response?: { data?: { message?: string } } };
