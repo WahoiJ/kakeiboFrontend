@@ -70,8 +70,10 @@ export const History: React.FC<ApiFetchProps> = ({ userId }) => {
             return;
         }
 
+        const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+
         try {
-            const response = await fetch(`http://localhost:8080/api/expenses/${expenseId}`, {
+            const response = await fetch(`${baseUrl}/api/expenses/${expenseId}`, {
                 method: 'DELETE',
                 headers: {
                     'Authorization': `Bearer ${token}`,
