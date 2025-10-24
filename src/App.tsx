@@ -6,6 +6,8 @@ import { MonthlyBudgets } from "./components/MonthlyBudgets";
 import { History } from "./components/History";
 import { ExpenseForm } from "./components/ExpenseForm";
 
+console.log('VITE_API_URL:', import.meta.env.VITE_API_URL);
+
 const today: Date = new Date();
 const year: number = today.getFullYear();
 const month: number = today.getMonth() + 1;
