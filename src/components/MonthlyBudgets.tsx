@@ -30,6 +30,7 @@ export const MonthlyBudgets: React.FC<MonthlyBudgetsFormProps> = ({ onAddMonthly
         const userIdNumber = Number(userId); // String を Number に変換
 
         const fetchBudgets = async () => {
+            const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
             const token = localStorage.getItem('token');
             const headers: HeadersInit = {
                 'Content-Type': 'application/json',
@@ -37,7 +38,7 @@ export const MonthlyBudgets: React.FC<MonthlyBudgetsFormProps> = ({ onAddMonthly
             if (token) {
                 headers['Authorization'] = `Bearer ${token}`;
             }
-            const response = await fetch(`/api/budgets?userId=${userIdNumber}`, {
+            const response = await fetch(`${baseUrl}/api/budgets?userId=${userIdNumber}`, {
                 method: 'GET',
                 headers: headers,
             });
@@ -60,14 +61,15 @@ export const MonthlyBudgets: React.FC<MonthlyBudgetsFormProps> = ({ onAddMonthly
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
         const token = localStorage.getItem('token');
         const headers: HeadersInit = {
-            "Content-Type": "application/json",
+            'Content-Type': 'application/json',
         };
         if (token) {
             headers['Authorization'] = `Bearer ${token}`;
         }
-        const response = await fetch("/api/budgets", {
+        const response = await fetch(`${baseUrl}/api/budgets`, {
             method: "POST",
             headers: headers,
             body: JSON.stringify({

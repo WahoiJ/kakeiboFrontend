@@ -23,7 +23,8 @@ export const History: React.FC<ApiFetchProps> = ({ userId }) => {
         }
 
         const userIdNumber = Number(userId); // String を Number に変換
-        const url = `http://localhost:8080/api/expenses?userId=${userIdNumber}`;
+        const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+        const url = `${baseUrl}/api/expenses?userId=${userIdNumber}`;
 
         const token = localStorage.getItem('token');
         if (!token) {
