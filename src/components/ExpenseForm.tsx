@@ -10,9 +10,10 @@ type DailyExpense = {
 
 interface ExpenseFormProps {
     userId: string;
+    onAddExpense?: (newExpense: DailyExpense) => void;
 }
 
-export const ExpenseForm: React.FC<ExpenseFormProps> = ({ userId }) => {
+export const ExpenseForm: React.FC<ExpenseFormProps> = ({ userId, onAddExpense }) => {
     const today = new Date().toISOString().split('T')[0];//Tで日付までとそのあとを分割
     const [expenseDate, setExpenseDate] = useState<string>(today);
     const [amount, setAmount] = useState<number>(0);

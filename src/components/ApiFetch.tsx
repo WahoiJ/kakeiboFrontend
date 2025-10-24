@@ -69,7 +69,7 @@ export const ApiFetch: React.FC<ApiFetchProps> = ({ userId }) => {
     return (
         <div>
             {error && <div style={{ color: 'red' }}>Error: {error}</div>}
-            <ExpenseForm onAddExpense={handleAddExpense} userId={userId} />
+            <ExpenseForm userId={userId} onAddExpense={handleAddExpense} />
             <ul>
                 <h2>出費履歴</h2>
                 {expenses.length > 0 ? (
