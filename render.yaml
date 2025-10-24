@@ -1,12 +1,13 @@
 services:
-  - type: web
+  - type: static
     name: kakeibo-frontend
-    runtime: node
-    runtimeVersion: "20"
     buildCommand: "npm install && npm run build"
-    startCommand: "npm run preview"
     staticPublishPath: dist
     envVars:
       - key: VITE_API_URL
-        value: "https://kakeibo-backend.onrender.com"
+        value: "https://kakeibobackend-t7v7.onrender.com"
     autoDeploy: true
+    routes:
+      - path: "/*"
+        destination: "/index.html"
+        status: 200
