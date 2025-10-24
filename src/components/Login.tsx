@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
+import { Link } from 'react-router-dom';
 
 interface LoginProps {
   setUserName: (userName: string | null) => void;
@@ -61,6 +62,7 @@ const Login: React.FC<LoginProps> = ({ setUserName, setUserId }) => {
         </div>
         {error && <p style={{ color: 'red' }}>{error}</p>}
         <button type="submit">ログイン</button>
+        <Link to="/signup">登録する</Link>
       </form>
     </div>
   );
