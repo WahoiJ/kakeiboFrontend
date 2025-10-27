@@ -53,6 +53,7 @@ const Dashboard = ({ userName, setIsLoggedIn, setUserName, userId }: { userName:
         }
 
         const fetchCurrentBudget = async () => {
+            const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
             const token = localStorage.getItem('token');
             const headers: HeadersInit = {
                 'Content-Type': 'application/json',
@@ -62,7 +63,7 @@ const Dashboard = ({ userName, setIsLoggedIn, setUserName, userId }: { userName:
             }
 
             try {
-                const budgetResponse = await fetch(`/api/budgets?userId=${userIdNumber}`, {
+                const budgetResponse = await fetch(`${baseUrl}/api/budgets?userId=${userIdNumber}`, {
                     method: 'GET',
                     headers: headers,
                 });
@@ -74,7 +75,7 @@ const Dashboard = ({ userName, setIsLoggedIn, setUserName, userId }: { userName:
                         setCurrentMonthBudget(currentBudget);
                     }
                 }
-                const expenseResponse = await fetch(`/api/monthly-expenses?userId=${userIdNumber}`, {
+                const expenseResponse = await fetch(`${baseUrl}/api/monthly-expenses?userId=${userIdNumber}`, {
                     method: 'GET',
                     headers: headers,
                 });
