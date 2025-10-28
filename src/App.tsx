@@ -182,7 +182,10 @@ function App() {
                     isLoggedIn ? (
                         <Dashboard userName={userName!} setIsLoggedIn={setIsLoggedIn} setUserName={setUserName} userId={userId!} />
                     ) : (
-                        <Navigate to="/login" />
+                        <>
+                            <a href="https://kakeibobackend-t7v7.onrender.com/">応答がない場合バックエンドにアクセスしてみてください。</a>
+                            <Navigate to="/login" />
+                        </>
                     )
                 } />
                 <Route path="/" element={<Navigate to="/login" />} />
