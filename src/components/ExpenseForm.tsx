@@ -16,6 +16,7 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ userId, onAddExpense }
     const today = new Date().toISOString().split('T')[0];//Tで日付までとそのあとを分割
     const [expenseDate, setExpenseDate] = useState<string>(today);
     const [amount, setAmount] = useState<number>(0);
+    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -26,7 +27,6 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ userId, onAddExpense }
         if (token) {
             headers['Authorization'] = `Bearer ${token}`;
         }
-        const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
         try {
             // 1. 日々の出費を追加
             const response = await fetch(`${baseUrl}/api/expenses`, {
@@ -80,7 +80,7 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ userId, onAddExpense }
     // 月別出費を保存する関数
     const saveMonthlyExpense = async (userId: number, budgetMonth: string, totalAmount: number, headers: HeadersInit) => {
         try {
-            const response = await fetch('/api/monthly-expenses', {
+            const response = await fetch(`${baseUrl}/api/monthly-expenses`, {
                 method: 'POST',
                 headers: headers,
                 body: JSON.stringify({

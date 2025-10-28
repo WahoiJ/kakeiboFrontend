@@ -101,7 +101,6 @@ const Dashboard = ({ userName, setIsLoggedIn, setUserName, userId }: { userName:
 
     return (
         <div>
-            <h2>ダッシュボード</h2>
             <p>ようこそ、{userName}さん</p>
             <p>あなたのUserID:{userId}</p>
 
@@ -135,7 +134,7 @@ const Dashboard = ({ userName, setIsLoggedIn, setUserName, userId }: { userName:
                     onClick={() => setActiveTab('monthlyBudgets')}
                     style={{ fontWeight: activeTab === 'monthlyBudgets' ? 'bold' : 'normal' }}
                 >
-                    Monthly Budgets
+                    月の予算設定
                 </button>
             </div>
 
