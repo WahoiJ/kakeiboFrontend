@@ -15,7 +15,7 @@ interface ApiFetchProps {
 export const ApiFetch: React.FC<ApiFetchProps> = ({ userId }) => {
     const [expenses, setExpenses] = useState<DailyExpense[]>([]);
     const [error, setError] = useState<string | null>(null);
-    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+    // baseUrl is defined in-use where needed
 
     useEffect(() => {
         console.log('ApiFetch userId:', userId);
@@ -67,27 +67,9 @@ export const ApiFetch: React.FC<ApiFetchProps> = ({ userId }) => {
         setExpenses(prev => [...prev, newExpense]);
     };
 
-    const saveMonthlyExpense = async (userId: number, budgetMonth: string, totalAmount: number, headers: HeadersInit) => {
-        try {
-            const response = await fetch(`${baseUrl}/api/monthly-expenses`, {
-                method: 'POST',
-                headers: headers,
-                body: JSON.stringify({
-                    user_id: userId,
-                    budget_month: budgetMonth,
-                    amount: totalAmount,
-                }),
-            });
-
-            if (response.ok) {
-                console.log('Monthly expense saved:', totalAmount);
-            } else {
-                console.error('Failed to save monthly expense');
-            }
-        } catch (error) {
-            console.error('Error saving monthly expense:', error);
-        }
-    };
+    // NOTE: monthly-expense の保存は各フォーム・履歴コンポーネント側で行うため
+    // ここでは専用の保存関数は用意しません。もし将来共通化する場合は
+    // このファイルに移して使用するか、ユーティリティに切り出してください。
 
     return (
         <div>
