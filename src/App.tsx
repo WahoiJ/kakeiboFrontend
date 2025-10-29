@@ -44,56 +44,61 @@ const Dashboard = ({ userName, setIsLoggedIn, setUserName, userId }: { userName:
         setCurrentMonthBudget(budget);
     }, []);
 
-    // マウント時に当月の予算を取得
-    useEffect(() => {
+    // 当月の予算／出費を取得するリフレッシュ関数
+    const refreshMonthData = useCallback(async () => {
         const userIdNumber = Number(userId);
 
         if (!userId || userId === 'undefined') {
             return;
         }
 
-        const fetchCurrentBudget = async () => {
-            const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
-            const token = localStorage.getItem('token');
-            const headers: HeadersInit = {
-                'Content-Type': 'application/json',
-            };
-            if (token) {
-                headers['Authorization'] = `Bearer ${token}`;
-            }
-
-            try {
-                const budgetResponse = await fetch(`${baseUrl}/api/budgets?userId=${userIdNumber}`, {
-                    method: 'GET',
-                    headers: headers,
-                });
-
-                if (budgetResponse.ok) {
-                    const data: MonthlyBudget[] = await budgetResponse.json();
-                    const currentBudget = data.find(b => b.budget_month === budgetMonthString);
-                    if (currentBudget) {
-                        setCurrentMonthBudget(currentBudget);
-                    }
-                }
-                const expenseResponse = await fetch(`${baseUrl}/api/monthly-expenses?userId=${userIdNumber}`, {
-                    method: 'GET',
-                    headers: headers,
-                });
-
-                if (expenseResponse.ok) {
-                    const expenseData: MonthlyExpenses[] = await expenseResponse.json();
-                    const currentExpenses = expenseData.find(e => e.budget_month === budgetMonthString);
-                    if (currentExpenses) {
-                        setCurrentMonthExpenses(currentExpenses);
-                    }
-                }
-            } catch (error) {
-                console.error('Failed to fetch current budget:', error);
-            }
+        const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+        const token = localStorage.getItem('token');
+        const headers: HeadersInit = {
+            'Content-Type': 'application/json',
         };
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
 
-        fetchCurrentBudget();
+        try {
+            const budgetResponse = await fetch(`${baseUrl}/api/budgets?userId=${userIdNumber}`, {
+                method: 'GET',
+                headers: headers,
+            });
+
+            if (budgetResponse.ok) {
+                const data: MonthlyBudget[] = await budgetResponse.json();
+                const currentBudget = data.find(b => b.budget_month === budgetMonthString);
+                if (currentBudget) {
+                    setCurrentMonthBudget(currentBudget);
+                } else {
+                    setCurrentMonthBudget(null);
+                }
+            }
+            const expenseResponse = await fetch(`${baseUrl}/api/monthly-expenses?userId=${userIdNumber}`, {
+                method: 'GET',
+                headers: headers,
+            });
+
+            if (expenseResponse.ok) {
+                const expenseData: MonthlyExpenses[] = await expenseResponse.json();
+                const currentExpenses = expenseData.find(e => e.budget_month === budgetMonthString);
+                if (currentExpenses) {
+                    setCurrentMonthExpenses(currentExpenses);
+                } else {
+                    setCurrentMonthExpenses(null);
+                }
+            }
+        } catch (error) {
+            console.error('Failed to fetch current budget:', error);
+        }
     }, [userId]);
+
+    // マウント／userId 変更時に一度リフレッシュ
+    useEffect(() => {
+        refreshMonthData();
+    }, [userId, refreshMonthData]);
 
     const AmountPerDay = (monthlyBudgets: number, monthlyExpenses: number, dateToday: number, lastDay: number): number => {
         return Math.round((monthlyBudgets - monthlyExpenses) / (lastDay - dateToday));
@@ -140,8 +145,8 @@ const Dashboard = ({ userName, setIsLoggedIn, setUserName, userId }: { userName:
 
             {/* タブの内容 */}
             <div style={{ marginTop: '20px' }}>
-                {activeTab === 'history' && <History userId={userId} />}
-                {activeTab === 'expenseForm' && <ExpenseForm userId={userId} />}
+                {activeTab === 'history' && <History userId={userId} onRefresh={refreshMonthData} />}
+                {activeTab === 'expenseForm' && <ExpenseForm userId={userId} onAddExpense={() => { refreshMonthData(); }} />}
                 {activeTab === 'monthlyBudgets' && <MonthlyBudgets onAddMonthlyBudets={handleAddBudget} userId={userId} />}
             </div>
         </div>

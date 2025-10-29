@@ -15,10 +15,11 @@ interface ApiFetchProps {
 export const ApiFetch: React.FC<ApiFetchProps> = ({ userId }) => {
     const [expenses, setExpenses] = useState<DailyExpense[]>([]);
     const [error, setError] = useState<string | null>(null);
+    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
     useEffect(() => {
         console.log('ApiFetch userId:', userId);
-        
+
         if (!userId || userId === 'undefined') {
             console.warn('userId が undefined です');
             setError('ユーザーIDが設定されていません');
@@ -64,6 +65,28 @@ export const ApiFetch: React.FC<ApiFetchProps> = ({ userId }) => {
 
     const handleAddExpense = (newExpense: DailyExpense) => {
         setExpenses(prev => [...prev, newExpense]);
+    };
+
+    const saveMonthlyExpense = async (userId: number, budgetMonth: string, totalAmount: number, headers: HeadersInit) => {
+        try {
+            const response = await fetch(`${baseUrl}/api/monthly-expenses`, {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify({
+                    user_id: userId,
+                    budget_month: budgetMonth,
+                    amount: totalAmount,
+                }),
+            });
+
+            if (response.ok) {
+                console.log('Monthly expense saved:', totalAmount);
+            } else {
+                console.error('Failed to save monthly expense');
+            }
+        } catch (error) {
+            console.error('Error saving monthly expense:', error);
+        }
     };
 
     return (

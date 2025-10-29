@@ -43,17 +43,6 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ userId, onAddExpense }
             }
             const newExpenseData = await response.json();
 
-            // onAddExpense を呼び出して新しい支出を追加
-            if (onAddExpense) {
-                const newExpense: DailyExpense = {
-                    expense_id: newExpenseData.expense_id || 0,
-                    user_id: Number(userId),
-                    expense_date: expenseDate,
-                    amount: amount,
-                };
-                onAddExpense(newExpense);
-            }
-
             // 2. 全出費を取得して合計を計算
             const expensesResponse = await fetch(`${baseUrl}/api/expenses?userId=${Number(userId)}`, {
                 method: 'GET',
@@ -67,6 +56,23 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ userId, onAddExpense }
                 // 3. 月別出費に保存
                 const yearMonth = expenseDate.substring(0, 7); // YYYY-MM 形式
                 await saveMonthlyExpense(Number(userId), yearMonth, totalAmount, headers);
+
+                // 保存が終わってから親に通知してリフレッシュを促す
+                if (onAddExpense) {
+                    const newExpense: DailyExpense = {
+                        expense_id: newExpenseData.expense_id || 0,
+                        user_id: Number(userId),
+                        expense_date: expenseDate,
+                        amount: amount,
+                    };
+                    try {
+                        onAddExpense(newExpense);
+                    } catch (e) {
+                        console.warn('onAddExpense handler threw:', e);
+                    }
+                }
+
+                alert('出費を追加しました！');
             }
 
             setExpenseDate(today);

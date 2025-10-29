@@ -9,11 +9,13 @@ type DailyExpense = {
 
 interface ApiFetchProps {
     userId: string;
+    onRefresh?: () => void;
 }
 
-export const History: React.FC<ApiFetchProps> = ({ userId }) => {
+export const History: React.FC<ApiFetchProps> = ({ userId, onRefresh }) => {
     const [expenses, setExpenses] = useState<DailyExpense[]>([]);
     const [error, setError] = useState<string | null>(null);
+    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
     useEffect(() => {
         if (!userId || userId === 'undefined') {
@@ -69,9 +71,18 @@ export const History: React.FC<ApiFetchProps> = ({ userId }) => {
             setError('トークンがありません。ログインしてください。');
             return;
         }
+        const userIdNumber = Number(userId);
 
-        const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+        // 削除対象と現在の合計、新合計を計算
+        const expenseToDelete = expenses.find(e => e.expense_id === expenseId);
+        const currentTotal = expenses.reduce((a, b) => a + b.amount, 0);
+        const newTotal = expenseToDelete ? currentTotal - expenseToDelete.amount : currentTotal;
+        const budgetMonth = expenseToDelete && expenseToDelete.expense_date ? expenseToDelete.expense_date.slice(0,7) : new Date().toISOString().slice(0,7);
 
+        const headers: HeadersInit = {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+        };
         try {
             const response = await fetch(`${baseUrl}/api/expenses/${expenseId}`, {
                 method: 'DELETE',
@@ -85,10 +96,60 @@ export const History: React.FC<ApiFetchProps> = ({ userId }) => {
             }
 
             // 削除成功時、リストから該当レコードを削除
-            setExpenses(expenses.filter(expense => expense.expense_id !== expenseId));
+            setExpenses(prev => prev.filter(expense => expense.expense_id !== expenseId));
+
+            // サーバ側の MonthlyExpenses を新合計で更新（存在すれば更新、なければ作成）
+            await saveMonthlyExpense(userIdNumber, budgetMonth, newTotal, headers);
+
+            // 親に更新を依頼（現在の月の合計等を再取得）
+            if (onRefresh) onRefresh();
         } catch (err) {
             console.error('Delete error:', err);
             setError(err instanceof Error ? err.message : 'エラーが発生しました');
+        }
+    };
+
+    const saveMonthlyExpense = async (userIdNum: number, budgetMonth: string, totalAmount: number, headers: HeadersInit) => {
+        try {
+            const queryUrl = `${baseUrl}/api/monthly-expenses?userId=${userIdNum}&budgetMonth=${encodeURIComponent(budgetMonth)}`;
+            const getRes = await fetch(queryUrl, { method: 'GET', headers });
+
+            if (!getRes.ok && getRes.status !== 404 && getRes.status !== 204) {
+                console.warn('Failed fetching monthly-expense:', getRes.status);
+            }
+
+            const text = await getRes.text();
+            const data = text ? JSON.parse(text) : [];
+
+            if (Array.isArray(data) && data.length > 0) {
+                const existing = data[0];
+                const id = existing.id ?? existing.monthly_expense_id ?? existing.monthlyExpenseId;
+                if (id) {
+                    const updateRes = await fetch(`${baseUrl}/api/monthly-expenses/${id}`, {
+                        method: 'PUT',
+                        headers,
+                        body: JSON.stringify({ user_id: userIdNum, budget_month: budgetMonth, amount: totalAmount }),
+                    });
+
+                    if (!updateRes.ok) {
+                        console.error('Failed to update monthly expense', updateRes.status);
+                    }
+                    return;
+                }
+            }
+
+            // 見つからなければ作成
+            const createRes = await fetch(`${baseUrl}/api/monthly-expenses`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ user_id: userIdNum, budget_month: budgetMonth, amount: totalAmount }),
+            });
+
+            if (!createRes.ok) {
+                console.error('Failed to create monthly expense', createRes.status);
+            }
+        } catch (error) {
+            console.error('Error saving monthly expense:', error);
         }
     };
 
