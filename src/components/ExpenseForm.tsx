@@ -15,7 +15,7 @@ interface ExpenseFormProps {
 export const ExpenseForm: React.FC<ExpenseFormProps> = ({ userId, onAddExpense }) => {
     const today = new Date().toISOString().split('T')[0];//Tで日付までとそのあとを分割
     const [expenseDate, setExpenseDate] = useState<string>(today);
-    const [amount, setAmount] = useState<number>(0);
+    const [amount, setAmount] = useState<number>((Number(localStorage.getItem('tempMoney'))));
     const [isSending, setIsSending] = useState<boolean>(false);
     const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
@@ -76,8 +76,7 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ userId, onAddExpense }
 
                 alert('出費を追加しました！');
                 setIsSending(false);
-                localStorage.removeItem('tempMoney');
-
+                localStorage.setItem('temp','0');
             }
 
             setExpenseDate(today);
