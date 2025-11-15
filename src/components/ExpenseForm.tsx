@@ -19,6 +19,9 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ userId, onAddExpense }
     const [isSending, setIsSending] = useState<boolean>(false);
     const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
+    //const valueoflocalStrage: string | null = localStorage.getItem('tempMoney');
+    //console.log('ローカルストレージの値は:'+valueoflocalStrage);
+
     const handleSubmit = async (e: React.FormEvent) => {
         setIsSending(true);
         e.preventDefault();
@@ -76,13 +79,13 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ userId, onAddExpense }
 
                 alert('出費を追加しました！');
                 setIsSending(false);
-                localStorage.setItem('temp','0');
+                localStorage.setItem('temp', '0');
             }
 
             setExpenseDate(today);
             setAmount(0);
         } catch (error) {
-            localStorage.setItem('tempMoney', '' + { amount });
+            localStorage.setItem('tempMoney', amount.toString());
             console.error('Error adding expense:', error);
             alert('出費の追加に失敗しました: ' + (error as Error).message);
             setAmount(Number(localStorage.getItem('tempMoney')));
