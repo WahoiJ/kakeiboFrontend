@@ -16,9 +16,11 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ userId, onAddExpense }
     const today = new Date().toISOString().split('T')[0];//Tで日付までとそのあとを分割
     const [expenseDate, setExpenseDate] = useState<string>(today);
     const [amount, setAmount] = useState<number>(0);
+    const [isSending, setIsSending] = useState<boolean>(false);
     const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
     const handleSubmit = async (e: React.FormEvent) => {
+        setIsSending(true);
         e.preventDefault();
         const token = localStorage.getItem('token');
         const headers: HeadersInit = {
@@ -73,13 +75,19 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ userId, onAddExpense }
                 }
 
                 alert('出費を追加しました！');
+                setIsSending(false);
+                localStorage.removeItem('tempMoney');
+
             }
 
             setExpenseDate(today);
             setAmount(0);
         } catch (error) {
+            localStorage.setItem('tempMoney', '' + { amount });
             console.error('Error adding expense:', error);
             alert('出費の追加に失敗しました: ' + (error as Error).message);
+            setAmount(Number(localStorage.getItem('tempMoney')));
+
         }
     };
 
@@ -126,10 +134,10 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ userId, onAddExpense }
                     onChange={(e) => setAmount(Number(e.target.value))}
                     required
                 />
-                
+
                 <label>円</label>
             </div>
-            <button type="submit">入力</button>
+            <button type="submit" disabled={amount <= 0 || isSending === true}>入力</button>
         </form>
     );
 };
