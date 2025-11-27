@@ -163,7 +163,12 @@ export const History: React.FC<ApiFetchProps> = ({ userId, onRefresh }) => {
                         <li key={expense.expense_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                             <span>{expense.expense_date} : {expense.amount}円</span>
                             <button 
-                                onClick={() => handleDeleteExpense(expense.expense_id)}
+                                onClick={() => {
+                                    const confirmed = window.confirm(`${expense.expense_date}の${expense.amount}円を削除しますか？`);
+                                    if(confirmed){
+                                        handleDeleteExpense(expense.expense_id);
+                                    }
+                                }}
                                 style={{ backgroundColor: 'red', color: 'white', border: 'none', padding: '5px 10px', cursor: 'pointer', borderRadius: '4px' }}
                             >
                                 削除
