@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { apiFetch, currentMonthString, errorMessage, yen, type DailyExpense } from "../api";
+import { apiFetch, currentMonthString, errorMessage, todayString, yen, type DailyExpense } from "../api";
 
 interface HistoryProps {
     userId: string;
@@ -23,6 +23,42 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
 ];
 
 const SORT_STORAGE_KEY = 'historySort';
+
+type PeriodKey = 'all' | 'thisMonth' | 'lastMonth' | 'last7' | 'last30' | 'month' | 'range';
+
+const PERIOD_OPTIONS: { key: PeriodKey; label: string }[] = [
+    { key: 'all', label: '全期間' },
+    { key: 'thisMonth', label: '今月' },
+    { key: 'lastMonth', label: '先月' },
+    { key: 'last7', label: '直近7日' },
+    { key: 'last30', label: '直近30日' },
+    { key: 'month', label: '月を指定' },
+    { key: 'range', label: '期間を指定' },
+];
+
+const daysAgo = (n: number): string => {
+    const d = new Date();
+    d.setDate(d.getDate() - n);
+    return todayString(d);
+};
+
+const lastMonthString = (): string => {
+    const d = new Date();
+    return currentMonthString(new Date(d.getFullYear(), d.getMonth() - 1, 1));
+};
+
+/** 期間を [開始日, 終了日]（YYYY-MM-DD、両端を含む）で返す。null は制限なし */
+const periodRange = (key: PeriodKey, month: string, from: string, to: string): [string | null, string | null] => {
+    switch (key) {
+        case 'all': return [null, null];
+        case 'thisMonth': return [`${currentMonthString()}-01`, `${currentMonthString()}-31`];
+        case 'lastMonth': return [`${lastMonthString()}-01`, `${lastMonthString()}-31`];
+        case 'last7': return [daysAgo(6), todayString()];
+        case 'last30': return [daysAgo(29), todayString()];
+        case 'month': return month ? [`${month}-01`, `${month}-31`] : [null, null];
+        case 'range': return [from || null, to || null];
+    }
+};
 
 const loadSortKey = (): SortKey => {
     try {
@@ -58,6 +94,10 @@ export const History: React.FC<HistoryProps> = ({ userId, onRefresh }) => {
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [sortKey, setSortKey] = useState<SortKey>(loadSortKey);
+    const [period, setPeriod] = useState<PeriodKey>('all');
+    const [periodMonth, setPeriodMonth] = useState<string>(currentMonthString());
+    const [rangeFrom, setRangeFrom] = useState<string>(daysAgo(29));
+    const [rangeTo, setRangeTo] = useState<string>(todayString());
 
     const handleSortChange = (key: SortKey) => {
         setSortKey(key);
@@ -101,9 +141,22 @@ export const History: React.FC<HistoryProps> = ({ userId, onRefresh }) => {
     const monthTotal = expenses
         .filter(e => e.expense_date?.startsWith(month))
         .reduce((a, b) => a + b.amount, 0);
-    const allTotal = expenses.reduce((a, b) => a + b.amount, 0);
 
-    const sorted = sortExpenses(expenses, sortKey);
+    // 期間で絞り込み（日付は YYYY-MM-DD なので文字列比較でよい）
+    const [start, end] = periodRange(period, periodMonth, rangeFrom, rangeTo);
+    const filtered = expenses.filter(e => {
+        if (start === null && end === null) return true;
+        if (!e.expense_date) return false;
+        return (start === null || e.expense_date >= start) && (end === null || e.expense_date <= end);
+    });
+    const filteredTotal = filtered.reduce((a, b) => a + b.amount, 0);
+    const periodLabel =
+        period === 'month' ? (periodMonth ? formatMonth(periodMonth) : '指定月')
+        : period === 'range' ? '指定期間'
+        : PERIOD_OPTIONS.find(o => o.key === period)?.label;
+    const invalidRange = period === 'range' && start !== null && end !== null && start > end;
+
+    const sorted = sortExpenses(filtered, sortKey);
     const byDate = sortKey.startsWith('date');
 
     // 日付順のときは月ごとにグループ化、金額順のときは月をまたいだ1つのリスト
@@ -132,15 +185,53 @@ export const History: React.FC<HistoryProps> = ({ userId, onRefresh }) => {
                     {SORT_OPTIONS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
                 </select>
             </div>
+            <div className="filters">
+                <div className="field">
+                    <label htmlFor="history-period">期間</label>
+                    <select
+                        id="history-period"
+                        className="select"
+                        value={period}
+                        onChange={(e) => setPeriod(e.target.value as PeriodKey)}
+                    >
+                        {PERIOD_OPTIONS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+                    </select>
+                </div>
+                {period === 'month' && (
+                    <div className="field">
+                        <label htmlFor="history-month">月</label>
+                        <input id="history-month" type="month" value={periodMonth} onChange={(e) => setPeriodMonth(e.target.value)} />
+                    </div>
+                )}
+                {period === 'range' && (
+                    <div className="range">
+                        <div className="field">
+                            <label htmlFor="history-from">開始日</label>
+                            <input id="history-from" type="date" value={rangeFrom} max={rangeTo || undefined} onChange={(e) => setRangeFrom(e.target.value)} />
+                        </div>
+                        <span className="range-sep">〜</span>
+                        <div className="field">
+                            <label htmlFor="history-to">終了日</label>
+                            <input id="history-to" type="date" value={rangeTo} min={rangeFrom || undefined} onChange={(e) => setRangeTo(e.target.value)} />
+                        </div>
+                    </div>
+                )}
+            </div>
             <div className="totals">
                 <div className="total-box"><span>今月の合計</span><b>{yen(monthTotal)}</b></div>
-                <div className="total-box"><span>全期間の合計</span><b>{yen(allTotal)}</b></div>
+                <div className="total-box">
+                    <span>{periodLabel}の合計（{filtered.length}件）</span>
+                    <b>{yen(filteredTotal)}</b>
+                </div>
             </div>
+            {invalidRange && <p className="msg-error">開始日は終了日より前にしてください</p>}
             {error && <p className="msg-error">{error}</p>}
             {loading ? (
                 <p className="empty">読み込み中…</p>
             ) : expenses.length === 0 ? (
                 <p className="empty">出費がありません</p>
+            ) : filtered.length === 0 ? (
+                <p className="empty">この期間の出費はありません</p>
             ) : (
                 <ul className="history-list">
                     {groups.map(g => (
