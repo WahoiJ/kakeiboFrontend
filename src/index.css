@@ -203,3 +203,18 @@ a:hover { text-decoration: underline; }
 .range { display: grid; grid-template-columns: 1fr auto 1fr; align-items: end; gap: 8px; }
 .range-sep { color: var(--muted); padding-bottom: 10px; }
 .range .field input { padding: 10px 8px; min-width: 0; }
+
+/* ---------- 予算の逆算 ---------- */
+.segmented { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: var(--border); padding: 4px; border-radius: 10px; }
+.segmented button {
+  appearance: none; border: none; background: transparent; color: var(--muted);
+  font: inherit; font-size: .875rem; font-weight: 600; padding: 8px 4px; border-radius: 7px; cursor: pointer;
+}
+.segmented button.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+.calc { background: var(--bg); border-radius: 10px; padding: 12px 14px; font-variant-numeric: tabular-nums; }
+.calc-row { display: flex; justify-content: space-between; padding: 2px 0; color: var(--muted); font-size: .9rem; }
+.calc-total { border-top: 1px solid var(--border); margin-top: 6px; padding-top: 8px; color: var(--text); font-weight: 800; font-size: 1.15rem; }
+.calc-total.negative { color: var(--danger); }
+.calc-perday { text-align: right; font-size: .85rem; color: var(--muted); margin-top: 2px; }
+.calc-perday b { color: var(--primary); }
+.summary-breakdown { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); font-size: .8rem; color: var(--muted); }
