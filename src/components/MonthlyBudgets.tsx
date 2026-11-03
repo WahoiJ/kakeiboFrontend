@@ -3,6 +3,7 @@ import { apiFetch, currentMonthString, errorMessage, yen, type MonthlyBudget } f
 import { FixedCostEditor } from "./FixedCostEditor";
 import { itemsFromBudget, itemsToPayload, newRow, type FixedCostRow } from "../fixedCosts";
 import { calcTakeHome } from "../takeHome";
+import { clearDraft, loadDraft, saveDraft } from "../draft";
 
 interface MonthlyBudgetsFormProps {
     onAddMonthlyBudets: (budget: MonthlyBudget) => void;
@@ -23,22 +24,68 @@ const daysInMonth = (month: string): number => {
 
 const toInput = (v: number | null | undefined): string => (v == null ? '' : String(v));
 
+type BudgetForm = {
+    mode: Mode;
+    income: string;
+    fixedRows: FixedCostRow[];
+    savingsGoal: string;
+    directAmount: string;
+};
+
+/** 下書きとして保存する形（行の id は保存しない） */
+type BudgetFormDraft = Omit<BudgetForm, 'fixedRows'> & { fixedRows: { name: string; amount: string }[] };
+
+type BudgetSettingsDraft = { month: string; gross: string; over40: boolean; residentTax: string };
+
+const emptyForm = (): BudgetForm => ({ mode: 'reverse', income: '', fixedRows: [newRow()], savingsGoal: '', directAmount: '' });
+
+const toDraft = (f: BudgetForm): BudgetFormDraft => ({
+    ...f,
+    fixedRows: f.fixedRows.map(r => ({ name: r.name, amount: r.amount })),
+});
+
+const fromDraft = (d: BudgetFormDraft): BudgetForm => ({
+    mode: d.mode === 'direct' ? 'direct' : 'reverse',
+    income: d.income ?? '',
+    fixedRows: d.fixedRows?.length ? d.fixedRows.map(r => newRow(r.name ?? '', r.amount ?? '')) : [newRow()],
+    savingsGoal: d.savingsGoal ?? '',
+    directAmount: d.directAmount ?? '',
+});
+
 export const MonthlyBudgets: React.FC<MonthlyBudgetsFormProps> = ({ onAddMonthlyBudets, userId }) => {
     const thisMonth = currentMonthString();
-    const [budgetMonthValue, setBudgetMonthValue] = useState<string>(thisMonth); // YYYY-MM
-    const [mode, setMode] = useState<Mode>('reverse');
-    const [income, setIncome] = useState<string>('');
-    const [fixedRows, setFixedRows] = useState<FixedCostRow[]>([newRow()]);
-    const [savingsGoal, setSavingsGoal] = useState<string>('');
-    const [directAmount, setDirectAmount] = useState<string>('');
+    // 設定月と「額面から計算」の入力は月をまたいで下書き保存する
+    const [settings] = useState(() => loadDraft<BudgetSettingsDraft>(userId, 'budget-settings'));
+    const [budgetMonthValue, setBudgetMonthValue] = useState<string>(settings?.month || thisMonth); // YYYY-MM
+    const [form, setForm] = useState<BudgetForm>(emptyForm);
     const [prefillNote, setPrefillNote] = useState<string | null>(null);
-    const [gross, setGross] = useState<string>('');
-    const [over40, setOver40] = useState<boolean>(false);
-    const [residentTax, setResidentTax] = useState<string>('');
+    const [restored, setRestored] = useState(false);
+    const [gross, setGross] = useState<string>(settings?.gross ?? '');
+    const [over40, setOver40] = useState<boolean>(settings?.over40 ?? false);
+    const [residentTax, setResidentTax] = useState<string>(settings?.residentTax ?? '');
     const [budgets, setBudgets] = useState<MonthlyBudget[]>([]);
+    const [loaded, setLoaded] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
     const [isSending, setIsSending] = useState(false);
+
+    const draftName = `budget:${budgetMonthValue}`;
+    const { mode, income, fixedRows, savingsGoal, directAmount } = form;
+
+    /** ユーザーの入力で form を変更し、その月の下書きとして保存する */
+    const editForm = (patch: Partial<BudgetForm>) => {
+        setForm(prev => {
+            const next = { ...prev, ...patch };
+            saveDraft<BudgetFormDraft>(userId, draftName, toDraft(next));
+            return next;
+        });
+        setRestored(true);
+    };
+
+    const saveSettings = (patch: Partial<BudgetSettingsDraft>) => {
+        const next = { month: budgetMonthValue, gross, over40, residentTax, ...patch };
+        saveDraft<BudgetSettingsDraft>(userId, 'budget-settings', next);
+    };
 
     const fetchBudgets = useCallback(async () => {
         if (!userId || userId === 'undefined') return;
@@ -47,6 +94,8 @@ export const MonthlyBudgets: React.FC<MonthlyBudgetsFormProps> = ({ onAddMonthly
         } catch (err) {
             console.error('Failed to fetch budgets:', err);
             setError(errorMessage(err, '予算の取得に失敗しました'));
+        } finally {
+            setLoaded(true);
         }
     }, [userId]);
 
@@ -56,29 +105,53 @@ export const MonthlyBudgets: React.FC<MonthlyBudgetsFormProps> = ({ onAddMonthly
 
     const selected = budgets.find(b => b.budget_month === budgetMonthValue);
 
-    // 月を切り替えたら、その月の設定を入力欄に読み込む。
-    // 未設定の月なら、直前の月の収入・固定費・貯めたい額を初期値にする（毎月ほぼ同じなので）
-    useEffect(() => {
-        if (selected) {
-            const reverse = selected.income != null;
-            setMode(reverse ? 'reverse' : 'direct');
-            setIncome(toInput(selected.income));
-            setFixedRows(itemsFromBudget(selected));
-            setSavingsGoal(toInput(selected.savings_goal));
-            setDirectAmount(toInput(selected.available_amount));
+    /** 保存済みの内容（または直前の月の内容）を入力欄に読み込む。下書きは使わない */
+    const loadFromServer = useCallback((month: string) => {
+        const current = budgets.find(b => b.budget_month === month);
+        if (current) {
+            setForm({
+                mode: current.income != null ? 'reverse' : 'direct',
+                income: toInput(current.income),
+                fixedRows: itemsFromBudget(current),
+                savingsGoal: toInput(current.savings_goal),
+                directAmount: toInput(current.available_amount),
+            });
             setPrefillNote(null);
             return;
         }
         const previous = budgets
-            .filter(b => b.budget_month < budgetMonthValue && b.income != null)
+            .filter(b => b.budget_month < month && b.income != null)
             .sort((a, b) => b.budget_month.localeCompare(a.budget_month))[0];
-        setMode('reverse');
-        setIncome(toInput(previous?.income));
-        setFixedRows(itemsFromBudget(previous));
-        setSavingsGoal(toInput(previous?.savings_goal));
-        setDirectAmount('');
+        setForm({
+            mode: 'reverse',
+            income: toInput(previous?.income),
+            fixedRows: itemsFromBudget(previous),
+            savingsGoal: toInput(previous?.savings_goal),
+            directAmount: '',
+        });
         setPrefillNote(previous ? `${formatMonth(previous.budget_month)}の設定を入れています` : null);
-    }, [budgetMonthValue, selected, budgets]);
+    }, [budgets]);
+
+    // 月を切り替えたとき・保存済みデータを取得したときに入力欄を読み込む。
+    // その月に保存していない入力（下書き）があれば、そちらを優先して復元する
+    useEffect(() => {
+        if (!loaded) return;
+        const draft = loadDraft<BudgetFormDraft>(userId, `budget:${budgetMonthValue}`);
+        if (draft) {
+            setForm(fromDraft(draft));
+            setPrefillNote(null);
+            setRestored(true);
+            return;
+        }
+        setRestored(false);
+        loadFromServer(budgetMonthValue);
+    }, [loaded, budgetMonthValue, loadFromServer, userId]);
+
+    const discardDraft = () => {
+        clearDraft(userId, draftName);
+        setRestored(false);
+        loadFromServer(budgetMonthValue);
+    };
 
     const incomeNum = Number(income) || 0;
     const fixedNum = fixedRows.reduce((a, r) => a + (Number(r.amount) || 0), 0);
@@ -112,12 +185,14 @@ export const MonthlyBudgets: React.FC<MonthlyBudgetsFormProps> = ({ onAddMonthly
                 method: 'POST',
                 body: JSON.stringify({ user_id: Number(userId), budget_month: budgetMonthValue, ...body }),
             });
+            clearDraft(userId, draftName);
+            setRestored(false);
             setSuccess(`${formatMonth(newBudget.budget_month)}の予算を ${yen(newBudget.available_amount)} で保存しました`);
             onAddMonthlyBudets(newBudget);
             await fetchBudgets();
         } catch (err) {
             console.error('Failed to save budget:', err);
-            setError(errorMessage(err, '予算の保存に失敗しました'));
+            setError(errorMessage(err, '予算の保存に失敗しました') + '（入力内容は残っています）');
         } finally {
             setIsSending(false);
         }
@@ -152,18 +227,27 @@ export const MonthlyBudgets: React.FC<MonthlyBudgetsFormProps> = ({ onAddMonthly
                         id="budget-month"
                         type="month"
                         value={budgetMonthValue}
-                        onChange={(e) => setBudgetMonthValue(e.target.value)}
+                        onChange={(e) => { setBudgetMonthValue(e.target.value); setSuccess(null); saveSettings({ month: e.target.value }); }}
                         required
                     />
                 </div>
 
+                {restored && (
+                    <div className="draft-note">
+                        <span>保存していない入力があります</span>
+                        <button type="button" className="btn btn-ghost" onClick={discardDraft}>
+                            {selected ? '保存済みの内容に戻す' : '入力を消す'}
+                        </button>
+                    </div>
+                )}
+
                 <div className="segmented" role="radiogroup" aria-label="設定方法">
                     <button type="button" role="radio" aria-checked={mode === 'reverse'}
-                        className={mode === 'reverse' ? 'active' : ''} onClick={() => setMode('reverse')}>
+                        className={mode === 'reverse' ? 'active' : ''} onClick={() => editForm({ mode: 'reverse' })}>
                         収入から逆算
                     </button>
                     <button type="button" role="radio" aria-checked={mode === 'direct'}
-                        className={mode === 'direct' ? 'active' : ''} onClick={() => setMode('direct')}>
+                        className={mode === 'direct' ? 'active' : ''} onClick={() => editForm({ mode: 'direct' })}>
                         金額を直接入力
                     </button>
                 </div>
@@ -171,16 +255,16 @@ export const MonthlyBudgets: React.FC<MonthlyBudgetsFormProps> = ({ onAddMonthly
                 {mode === 'reverse' ? (
                     <>
                         {prefillNote && <p className="hint">{prefillNote}</p>}
-                        {moneyField('budget-income', '収入', income, setIncome, '手取りの月収')}
+                        {moneyField('budget-income', '収入', income, v => editForm({ income: v }), '手取りの月収')}
                         <details className="gross-calc">
                             <summary>額面から手取りを計算する</summary>
                             <div className="gross-body">
-                                {moneyField('budget-gross', '額面（総支給額）', gross, setGross, '給与明細の総支給額。会社員・扶養なし・賞与なしの前提で概算します')}
+                                {moneyField('budget-gross', '額面（総支給額）', gross, v => { setGross(v); saveSettings({ gross: v }); }, '給与明細の総支給額。会社員・扶養なし・賞与なしの前提で概算します')}
                                 <label className="check">
-                                    <input type="checkbox" checked={over40} onChange={(e) => setOver40(e.target.checked)} />
+                                    <input type="checkbox" checked={over40} onChange={(e) => { setOver40(e.target.checked); saveSettings({ over40: e.target.checked }); }} />
                                     40〜64歳（介護保険料あり）
                                 </label>
-                                {moneyField('budget-resident', '住民税（月額・任意）', residentTax, setResidentTax, '住民税決定通知書の金額。空欄なら概算します')}
+                                {moneyField('budget-resident', '住民税（月額・任意）', residentTax, v => { setResidentTax(v); saveSettings({ residentTax: v }); }, '住民税決定通知書の金額。空欄なら概算します')}
                                 {takeHome && (
                                     <>
                                         <div className="calc">
@@ -195,7 +279,7 @@ export const MonthlyBudgets: React.FC<MonthlyBudgetsFormProps> = ({ onAddMonthly
                                         <button
                                             type="button"
                                             className="btn btn-ghost"
-                                            onClick={() => setIncome(String(takeHome.takeHome))}
+                                            onClick={() => editForm({ income: String(takeHome.takeHome) })}
                                         >
                                             この手取りを収入に入れる
                                         </button>
@@ -203,8 +287,8 @@ export const MonthlyBudgets: React.FC<MonthlyBudgetsFormProps> = ({ onAddMonthly
                                 )}
                             </div>
                         </details>
-                        <FixedCostEditor rows={fixedRows} onChange={setFixedRows} />
-                        {moneyField('budget-savings', '貯めたい額', savingsGoal, setSavingsGoal)}
+                        <FixedCostEditor rows={fixedRows} onChange={rows => editForm({ fixedRows: rows })} />
+                        {moneyField('budget-savings', '貯めたい額', savingsGoal, v => editForm({ savingsGoal: v }))}
 
                         <div className="calc">
                             <div className="calc-row"><span>収入</span><span>{yen(incomeNum)}</span></div>
@@ -220,7 +304,7 @@ export const MonthlyBudgets: React.FC<MonthlyBudgetsFormProps> = ({ onAddMonthly
                         {computed < 0 && <p className="msg-error">固定費と貯めたい額の合計が収入を超えています</p>}
                     </>
                 ) : (
-                    moneyField('budget-amount', '使ってよい金額', directAmount, setDirectAmount,
+                    moneyField('budget-amount', '使ってよい金額', directAmount, v => editForm({ directAmount: v }),
                         directAmount !== '' ? `1日あたり約 ${yen(perDay)}` : undefined)
                 )}
 

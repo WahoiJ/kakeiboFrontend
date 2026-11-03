@@ -6,6 +6,7 @@ import { MonthlyBudgets } from "./components/MonthlyBudgets";
 import { History } from "./components/History";
 import { ExpenseForm } from "./components/ExpenseForm";
 import { apiFetch, AUTH_EXPIRED_EVENT, currentMonthString, yen, type MonthlyBudget, type MonthlyExpenses } from "./api";
+import { clearAllDrafts, loadDraft, saveDraft } from "./draft";
 
 /** 今日を含めた残り日数で、1日あたり使える額を計算 */
 const amountPerDay = (budget: number, expenses: number, today: Date): number => {
@@ -23,7 +24,16 @@ const TABS: { key: Tab; label: string }[] = [
 ];
 
 const Dashboard = ({ userName, onLogout, userId }: { userName: string; onLogout: () => void; userId: string }) => {
-    const [activeTab, setActiveTab] = useState<Tab>('expenseForm');
+    // 開いていたタブはリロードしても維持する
+    const [activeTab, setActiveTabState] = useState<Tab>(() => {
+        const saved = loadDraft<Tab>(userId, 'tab');
+        return TABS.some(t => t.key === saved) ? saved! : 'expenseForm';
+    });
+    const setActiveTab = (tab: Tab) => {
+        setActiveTabState(tab);
+        saveDraft<Tab>(userId, 'tab', tab);
+    };
+    const [carriedFrom, setCarriedFrom] = useState<string | null>(null);
     const [currentMonthBudget, setCurrentMonthBudget] = useState<MonthlyBudget | null>(null);
     const [currentMonthExpenses, setCurrentMonthExpenses] = useState<MonthlyExpenses | null>(null);
     const [loaded, setLoaded] = useState(false);
@@ -39,7 +49,28 @@ const Dashboard = ({ userName, onLogout, userId }: { userName: string; onLogout:
                 apiFetch<MonthlyBudget[]>(`/api/budgets?userId=${Number(userId)}`),
                 apiFetch<MonthlyExpenses[]>(`/api/monthly-expenses?userId=${Number(userId)}`),
             ]);
-            setCurrentMonthBudget(budgets.find(b => b.budget_month === month) ?? null);
+            let current = budgets.find(b => b.budget_month === month) ?? null;
+            if (!current) {
+                // 今月の予算がなければ、直前に「収入から逆算」で設定した月の内容を自動で引き継いで保存する
+                const previous = budgets
+                    .filter(b => b.budget_month < month && b.income != null)
+                    .sort((a, b) => b.budget_month.localeCompare(a.budget_month))[0];
+                if (previous) {
+                    current = await apiFetch<MonthlyBudget>('/api/budgets', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            user_id: Number(userId),
+                            budget_month: month,
+                            income: previous.income,
+                            fixed_costs: previous.fixed_costs,
+                            fixed_cost_items: previous.fixed_cost_items ?? null,
+                            savings_goal: previous.savings_goal,
+                        }),
+                    });
+                    setCarriedFrom(previous.budget_month);
+                }
+            }
+            setCurrentMonthBudget(current);
             setCurrentMonthExpenses(expenses.find(e => e.budget_month === month) ?? null);
         } catch (error) {
             console.error('Failed to fetch current month data:', error);
@@ -89,6 +120,11 @@ const Dashboard = ({ userName, onLogout, userId }: { userName: string; onLogout:
                             <div>残り日数<b>{remainingDays}日</b></div>
                             <div>消化率<b>{Math.round(usedRatio * 100)}%</b></div>
                         </div>
+                        {carriedFrom && (
+                            <div className="summary-breakdown">
+                                {Number(carriedFrom.slice(5))}月の予算を引き継ぎました。変更は「予算設定」から
+                            </div>
+                        )}
                         {currentMonthBudget.income != null && (
                             <div className="summary-breakdown">
                                 収入 {yen(currentMonthBudget.income)} − 固定費 {yen(currentMonthBudget.fixed_costs ?? 0)} − 貯めたい額 {yen(currentMonthBudget.savings_goal ?? 0)}
@@ -153,7 +189,7 @@ function App() {
     const [userId, setUserId] = useState<string | null>(initialUser ? String(initialUser.id) : null);
     const [isLoggedIn, setIsLoggedIn] = useState(initialUser !== null);
 
-    const handleLogout = useCallback(() => {
+    const signOut = useCallback(() => {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         setIsLoggedIn(false);
@@ -161,17 +197,24 @@ function App() {
         setUserId(null);
     }, []);
 
+    // 自分でログアウトしたときは、この端末に残っている下書きも消す
+    const handleLogout = useCallback(() => {
+        clearAllDrafts();
+        signOut();
+    }, [signOut]);
+
     // トークン期限切れ（API が 401 を返した）ときはログアウトしてログイン画面へ
     useEffect(() => {
         const onExpired = () => {
             if (localStorage.getItem('token')) {
                 alert('ログインの有効期限が切れました。再度ログインしてください。');
             }
-            handleLogout();
+            // 期限切れのときは下書きを残す（再ログイン後に続きから入力できる）
+            signOut();
         };
         window.addEventListener(AUTH_EXPIRED_EVENT, onExpired);
         return () => window.removeEventListener(AUTH_EXPIRED_EVENT, onExpired);
-    }, [handleLogout]);
+    }, [signOut]);
 
     return (
         <Router>

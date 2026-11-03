@@ -245,3 +245,9 @@ a:hover { text-decoration: underline; }
 .fixed-total { display: flex; justify-content: space-between; margin-top: 8px; font-size: .9rem; color: var(--muted); }
 .fixed-total b { color: var(--text); }
 .summary-items { margin-top: 4px; }
+
+/* ---------- 下書きの復元表示 ---------- */
+.draft-note {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  background: var(--primary-soft); color: var(--primary); border-radius: 8px; padding: 6px 6px 6px 12px; font-size: .85rem;
+}
