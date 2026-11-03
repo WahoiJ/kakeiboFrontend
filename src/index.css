@@ -181,3 +181,18 @@ a:hover { text-decoration: underline; }
 
 .budget-current { margin-top: 12px; font-size: .9rem; color: var(--muted); text-align: center; }
 .budget-current b { color: var(--text); }
+
+/* ---------- 並び替え ---------- */
+.card-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.card-header .card-title { margin-bottom: 0; }
+.select {
+  font: inherit;
+  font-size: .875rem;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+.select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+.history-date { white-space: nowrap; }
