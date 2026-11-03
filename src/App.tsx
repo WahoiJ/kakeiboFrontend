@@ -89,6 +89,11 @@ const Dashboard = ({ userName, onLogout, userId }: { userName: string; onLogout:
                             <div>残り日数<b>{remainingDays}日</b></div>
                             <div>消化率<b>{Math.round(usedRatio * 100)}%</b></div>
                         </div>
+                        {currentMonthBudget.income != null && (
+                            <div className="summary-breakdown">
+                                収入 {yen(currentMonthBudget.income)} − 固定費 {yen(currentMonthBudget.fixed_costs ?? 0)} − 貯めたい額 {yen(currentMonthBudget.savings_goal ?? 0)}
+                            </div>
+                        )}
                     </>
                 ) : loaded ? (
                     <div className="empty-budget">

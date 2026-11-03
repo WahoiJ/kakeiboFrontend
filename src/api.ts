@@ -13,6 +13,10 @@ export type MonthlyBudget = {
     user_id: number;
     budget_month: string;
     available_amount: number;
+    /** 逆算モードのときのみ値が入る（直接入力の場合は null） */
+    income?: number | null;
+    fixed_costs?: number | null;
+    savings_goal?: number | null;
 };
 
 export type MonthlyExpenses = {
