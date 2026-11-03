@@ -1,11 +1,7 @@
 import React, { useState } from "react";
+import { apiFetch, errorMessage, todayString, yen, type DailyExpense } from "../api";
 
-type DailyExpense = {
-    expense_id: number;
-    user_id: number;
-    expense_date: string | null;
-    amount: number;
-};
+const TEMP_KEY = 'tempMoney'; // 送信失敗時に入力額を一時保存するキー
 
 interface ExpenseFormProps {
     userId: string;
@@ -13,133 +9,77 @@ interface ExpenseFormProps {
 }
 
 export const ExpenseForm: React.FC<ExpenseFormProps> = ({ userId, onAddExpense }) => {
-    const today = new Date().toISOString().split('T')[0];//Tで日付までとそのあとを分割
-    const [expenseDate, setExpenseDate] = useState<string>(today);
-    const [amount, setAmount] = useState<number>((Number(localStorage.getItem('tempMoney'))));
+    const [expenseDate, setExpenseDate] = useState<string>(todayString());
+    const [amount, setAmount] = useState<string>(localStorage.getItem(TEMP_KEY) || '');
     const [isSending, setIsSending] = useState<boolean>(false);
-    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+    const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-    //const valueoflocalStrage: string | null = localStorage.getItem('tempMoney');
-    //console.log('ローカルストレージの値は:'+valueoflocalStrage);
+    const amountNumber = Number(amount);
 
     const handleSubmit = async (e: React.FormEvent) => {
-        setIsSending(true);
         e.preventDefault();
-        const token = localStorage.getItem('token');
-        const headers: HeadersInit = {
-            "Content-Type": "application/json",
-        };
-        if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
-        }
+        if (isSending) return;
+        setIsSending(true);
+        setMessage(null);
         try {
-            // 1. 日々の出費を追加
-            const response = await fetch(`${baseUrl}/api/expenses`, {
-                method: "POST",
-                headers: headers,
+            // 日々の出費を追加（月別出費の合計はバックエンドで自動再計算される）
+            const newExpense = await apiFetch<DailyExpense>('/api/expenses', {
+                method: 'POST',
                 body: JSON.stringify({
                     user_id: Number(userId),
                     expense_date: expenseDate,
-                    amount: amount,
+                    amount: amountNumber,
                 }),
             });
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            const newExpenseData = await response.json();
-
-            // 2. 全出費を取得して合計を計算
-            const expensesResponse = await fetch(`${baseUrl}/api/expenses?userId=${Number(userId)}`, {
-                method: 'GET',
-                headers: headers,
-            });
-
-            if (expensesResponse.ok) {
-                const allExpenses: DailyExpense[] = await expensesResponse.json();
-                const totalAmount = allExpenses.reduce((a, b) => a + b.amount, 0);
-
-                // 3. 月別出費に保存
-                const yearMonth = expenseDate.substring(0, 7); // YYYY-MM 形式
-                await saveMonthlyExpense(Number(userId), yearMonth, totalAmount, headers);
-
-                // 保存が終わってから親に通知してリフレッシュを促す
-                if (onAddExpense) {
-                    const newExpense: DailyExpense = {
-                        expense_id: newExpenseData.expense_id || 0,
-                        user_id: Number(userId),
-                        expense_date: expenseDate,
-                        amount: amount,
-                    };
-                    try {
-                        onAddExpense(newExpense);
-                    } catch (e) {
-                        console.warn('onAddExpense handler threw:', e);
-                    }
-                }
-
-                alert('出費を追加しました！');
-                setIsSending(false);
-                localStorage.setItem('temp', '0');
-            }
-
-            setExpenseDate(today);
-            setAmount(0);
+            localStorage.removeItem(TEMP_KEY);
+            setExpenseDate(todayString());
+            setAmount('');
+            setMessage({ type: 'success', text: `${newExpense.expense_date} に ${yen(newExpense.amount)} を追加しました` });
+            onAddExpense?.(newExpense);
         } catch (error) {
-            localStorage.setItem('tempMoney', amount.toString());
+            localStorage.setItem(TEMP_KEY, amount);
             console.error('Error adding expense:', error);
-            alert('出費の追加に失敗しました: ' + (error as Error).message);
-            setAmount(Number(localStorage.getItem('tempMoney')));
-
-        }
-    };
-
-    // 月別出費を保存する関数
-    const saveMonthlyExpense = async (userId: number, budgetMonth: string, totalAmount: number, headers: HeadersInit) => {
-        try {
-            const response = await fetch(`${baseUrl}/api/monthly-expenses`, {
-                method: 'POST',
-                headers: headers,
-                body: JSON.stringify({
-                    user_id: userId,
-                    budget_month: budgetMonth,
-                    amount: totalAmount,
-                }),
-            });
-
-            if (response.ok) {
-                console.log('Monthly expense saved:', totalAmount);
-            } else {
-                console.error('Failed to save monthly expense');
-            }
-        } catch (error) {
-            console.error('Error saving monthly expense:', error);
+            setMessage({ type: 'error', text: '出費の追加に失敗しました: ' + errorMessage(error, (error as Error).message) });
+        } finally {
+            setIsSending(false);
         }
     };
 
     return (
-        <form onSubmit={handleSubmit}>
-            <h2>出費を入力する</h2>
-            <div>
-                <label>日付:</label>
-                <input
-                    type="date"
-                    value={expenseDate}
-                    onChange={(e) => setExpenseDate(e.target.value)}
-                ></input>
-            </div>
-            <div>
-                <label>出費額:</label>
-
-                <input
-                    type="number"
-                    value={amount}
-                    onChange={(e) => setAmount(Number(e.target.value))}
-                    required
-                />
-
-                <label>円</label>
-            </div>
-            <button type="submit" disabled={amount <= 0 || isSending === true}>入力</button>
-        </form>
+        <section className="card">
+            <h2 className="card-title">出費を入力する</h2>
+            <form className="form" onSubmit={handleSubmit}>
+                <div className="field">
+                    <label htmlFor="expense-amount">金額</label>
+                    <div className="input-suffix">
+                        <input
+                            id="expense-amount"
+                            type="number"
+                            inputMode="numeric"
+                            min={1}
+                            placeholder="0"
+                            value={amount}
+                            onChange={(e) => setAmount(e.target.value)}
+                            required
+                        />
+                        <span>円</span>
+                    </div>
+                </div>
+                <div className="field">
+                    <label htmlFor="expense-date">日付</label>
+                    <input
+                        id="expense-date"
+                        type="date"
+                        value={expenseDate}
+                        onChange={(e) => setExpenseDate(e.target.value)}
+                        required
+                    />
+                </div>
+                {message && <p className={message.type === 'success' ? 'msg-success' : 'msg-error'}>{message.text}</p>}
+                <button className="btn btn-primary" type="submit" disabled={!(amountNumber > 0) || isSending}>
+                    {isSending ? '送信中…' : '追加する'}
+                </button>
+            </form>
+        </section>
     );
 };

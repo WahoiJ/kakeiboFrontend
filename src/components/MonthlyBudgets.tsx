@@ -1,122 +1,102 @@
-import React, { useState, useEffect } from "react";
-
-type MonthlyBudgets = {
-    user_id: number;
-    budget_month: string;
-    available_amount: number;
-}
+import React, { useState, useEffect, useCallback } from "react";
+import { apiFetch, currentMonthString, errorMessage, yen, type MonthlyBudget } from "../api";
 
 interface MonthlyBudgetsFormProps {
-    onAddMonthlyBudets: (buget: MonthlyBudgets) => void;
+    onAddMonthlyBudets: (budget: MonthlyBudget) => void;
     userId: string;
 }
 
-
 export const MonthlyBudgets: React.FC<MonthlyBudgetsFormProps> = ({ onAddMonthlyBudets, userId }) => {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = today.getMonth() + 1;
-    const budgetMonthString = `${year}-${month}`;
-    const [budgetMonthValue, setBudgetMonthValue] = useState<string>(budgetMonthString);
-    const [inputAvailableAmount, setInputAvailableAmount] = useState<number>(0);
-    const [availableAmount, setAvailableAmount] = useState<number>(0);
+    const thisMonth = currentMonthString();
+    const [budgetMonthValue, setBudgetMonthValue] = useState<string>(thisMonth); // YYYY-MM
+    const [inputAvailableAmount, setInputAvailableAmount] = useState<string>('');
+    const [budgets, setBudgets] = useState<MonthlyBudget[]>([]);
+    const [error, setError] = useState<string | null>(null);
+    const [isSending, setIsSending] = useState(false);
+
+    const fetchBudgets = useCallback(async () => {
+        if (!userId || userId === 'undefined') return;
+        try {
+            setBudgets(await apiFetch<MonthlyBudget[]>(`/api/budgets?userId=${Number(userId)}`));
+        } catch (err) {
+            console.error('Failed to fetch budgets:', err);
+            setError(errorMessage(err, '予算の取得に失敗しました'));
+        }
+    }, [userId]);
 
     useEffect(() => {
-        if (!userId || userId === 'undefined') {
-            console.warn('userId が undefined です');
-            return;
-        }
-
-        const userIdNumber = Number(userId); // String を Number に変換
-
-        const fetchBudgets = async () => {
-            const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
-            const token = localStorage.getItem('token');
-            const headers: HeadersInit = {
-                'Content-Type': 'application/json',
-            };
-            if (token) {
-                headers['Authorization'] = `Bearer ${token}`;
-            }
-            const response = await fetch(`${baseUrl}/api/budgets?userId=${userIdNumber}`, {
-                method: 'GET',
-                headers: headers,
-            });
-            if (response.ok) {
-                const data: MonthlyBudgets[] = await response.json();
-                // 現在の月のavailableAmountを設定
-                const currentBudget = data.find(b => b.budget_month === budgetMonthString);
-                if (currentBudget) {
-                    setAvailableAmount(currentBudget.available_amount);
-                } else {
-                    setAvailableAmount(0); // データがない場合は0
-                }
-            } else {
-                console.error('Failed to fetch budgets, status:', response.status);
-                setAvailableAmount(0);
-            }
-        };
         fetchBudgets();
-    }, [userId, budgetMonthString]);
+    }, [fetchBudgets]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
-        const token = localStorage.getItem('token');
-        const headers: HeadersInit = {
-            'Content-Type': 'application/json',
-        };
-        if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
-        }
-        const response = await fetch(`${baseUrl}/api/budgets`, {
-            method: "POST",
-            headers: headers,
-            body: JSON.stringify({
-                user_id: Number(userId),
-                budget_month: budgetMonthValue,
-                available_amount: inputAvailableAmount,
-            }),
-        });
-        if (response.ok) {
-            const newBudget: MonthlyBudgets = await response.json();
+        setError(null);
+        setIsSending(true);
+        try {
+            const newBudget = await apiFetch<MonthlyBudget>('/api/budgets', {
+                method: 'POST',
+                body: JSON.stringify({
+                    user_id: Number(userId),
+                    budget_month: budgetMonthValue,
+                    available_amount: Number(inputAvailableAmount),
+                }),
+            });
             onAddMonthlyBudets(newBudget);
-            setBudgetMonthValue(budgetMonthString);
-            // フォームをリセット
-            setInputAvailableAmount(0);
-            // useEffectが再実行されてDBから最新データを取得
-            setAvailableAmount(newBudget.available_amount);
-        } else {
-            console.error('Failed to save budget, response status:', response.status);
+            setBudgetMonthValue(thisMonth);
+            setInputAvailableAmount('');
+            await fetchBudgets();
+        } catch (err) {
+            console.error('Failed to save budget:', err);
+            setError(errorMessage(err, '予算の保存に失敗しました'));
+        } finally {
+            setIsSending(false);
         }
     };
+
+    const selected = budgets.find(b => b.budget_month === budgetMonthValue);
+
+    const [selY, selM] = budgetMonthValue.split('-');
+
     return (
-        <>
-            <form onSubmit={handleSubmit}>
-
-                <h2>月の出費目標を入力する</h2>
-                <div>
-                    <label>設定月</label>
+        <section className="card">
+            <h2 className="card-title">月の予算を設定する</h2>
+            <form className="form" onSubmit={handleSubmit}>
+                <div className="field">
+                    <label htmlFor="budget-month">設定月</label>
                     <input
-                        type="text"
+                        id="budget-month"
+                        type="month"
                         value={budgetMonthValue}
-                        onChange={(e) => setBudgetMonthValue((e.target.value))}
+                        onChange={(e) => setBudgetMonthValue(e.target.value)}
                         required
                     />
                 </div>
-                <div>
-                    <label>出費可能額:</label>
-                    <input
-                        type="number"
-                        value={inputAvailableAmount}
-                        onChange={(e) => setInputAvailableAmount(Number(e.target.value))}
-                        required
-                    />
+                <div className="field">
+                    <label htmlFor="budget-amount">使ってよい金額</label>
+                    <div className="input-suffix">
+                        <input
+                            id="budget-amount"
+                            type="number"
+                            inputMode="numeric"
+                            min={0}
+                            placeholder={selected ? String(selected.available_amount) : '0'}
+                            value={inputAvailableAmount}
+                            onChange={(e) => setInputAvailableAmount(e.target.value)}
+                            required
+                        />
+                        <span>円</span>
+                    </div>
                 </div>
-                <button type="submit">入力</button>
+                {error && <p className="msg-error">{error}</p>}
+                <button className="btn btn-primary" type="submit" disabled={isSending || inputAvailableAmount === ''}>
+                    {selected ? '予算を更新する' : '予算を登録する'}
+                </button>
             </form>
-            <div>登録した額: {availableAmount}円</div>
-
-        </>
+            {selY && selM && (
+                <p className="budget-current">
+                    {selY}年{Number(selM)}月の現在の予算: <b>{selected ? yen(selected.available_amount) : '未設定'}</b>
+                </p>
+            )}
+        </section>
     );
 };
