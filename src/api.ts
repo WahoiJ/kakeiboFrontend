@@ -88,3 +88,8 @@ export function todayString(d: Date = new Date()): string {
 export function currentMonthString(d: Date = new Date()): string {
     return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
 }
+
+/** 金額を "1,234円" 形式で表示 */
+export function yen(n: number): string {
+    return `${Math.round(n).toLocaleString('ja-JP')}円`;
+}

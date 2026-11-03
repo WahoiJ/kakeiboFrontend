@@ -31,34 +31,39 @@ const SignUpForm: React.FC = () => {
   };
 
   return (
-    <div>
-      <h2>アカウント登録</h2>
-      <form onSubmit={handleSubmit}>
-        <div>
-          <label>ユーザー名:</label>
+    <div className="card">
+      <h2 className="card-title">アカウント登録</h2>
+      <form className="form" onSubmit={handleSubmit}>
+        <div className="field">
+          <label htmlFor="signup-user">ユーザー名</label>
           <input
+            id="signup-user"
             type="text"
+            autoComplete="username"
             value={userName}
             onChange={(e) => setUserName(e.target.value)}
             required
           />
         </div>
-        <div>
-          <label>パスワード（英数字のみ）:</label>
+        <div className="field">
+          <label htmlFor="signup-pass">パスワード</label>
           <input
+            id="signup-pass"
             type="password"
+            autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             pattern="[a-zA-Z0-9]+"
             title="英数字のみ使用できます"
             required
           />
+          <span className="hint">英数字のみ使用できます</span>
         </div>
-        {error && <p style={{ color: 'red' }}>{error}</p>}
-        {success && <p style={{ color: 'green' }}>{success}</p>}
-        <button type="submit" disabled={isSending}>登録</button>
+        {error && <p className="msg-error">{error}</p>}
+        {success && <p className="msg-success">{success}</p>}
+        <button className="btn btn-primary" type="submit" disabled={isSending}>登録</button>
+        <p className="auth-footer">すでにアカウントをお持ちの方は <Link to="/login">ログイン</Link></p>
       </form>
-      <p>すでにアカウントをお持ちですか？ <Link to="/login">ログイン</Link></p>
     </div>
   );
 };

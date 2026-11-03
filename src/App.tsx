@@ -5,7 +5,7 @@ import SignUpForm from "./components/SignUpForm";
 import { MonthlyBudgets } from "./components/MonthlyBudgets";
 import { History } from "./components/History";
 import { ExpenseForm } from "./components/ExpenseForm";
-import { apiFetch, AUTH_EXPIRED_EVENT, currentMonthString, type MonthlyBudget, type MonthlyExpenses } from "./api";
+import { apiFetch, AUTH_EXPIRED_EVENT, currentMonthString, yen, type MonthlyBudget, type MonthlyExpenses } from "./api";
 
 /** 今日を含めた残り日数で、1日あたり使える額を計算 */
 const amountPerDay = (budget: number, expenses: number, today: Date): number => {
@@ -14,10 +14,19 @@ const amountPerDay = (budget: number, expenses: number, today: Date): number => 
     return Math.floor((budget - expenses) / remainingDays);
 };
 
+type Tab = 'history' | 'expenseForm' | 'monthlyBudgets';
+
+const TABS: { key: Tab; label: string }[] = [
+    { key: 'expenseForm', label: '出費の入力' },
+    { key: 'history', label: '履歴' },
+    { key: 'monthlyBudgets', label: '予算設定' },
+];
+
 const Dashboard = ({ userName, onLogout, userId }: { userName: string; onLogout: () => void; userId: string }) => {
-    const [activeTab, setActiveTab] = useState<'monthlyBudgets' | 'history' | 'expenseForm'>('history');
+    const [activeTab, setActiveTab] = useState<Tab>('expenseForm');
     const [currentMonthBudget, setCurrentMonthBudget] = useState<MonthlyBudget | null>(null);
     const [currentMonthExpenses, setCurrentMonthExpenses] = useState<MonthlyExpenses | null>(null);
+    const [loaded, setLoaded] = useState(false);
 
     // 当月の予算／出費を取得するリフレッシュ関数
     const refreshMonthData = useCallback(async () => {
@@ -34,6 +43,8 @@ const Dashboard = ({ userName, onLogout, userId }: { userName: string; onLogout:
             setCurrentMonthExpenses(expenses.find(e => e.budget_month === month) ?? null);
         } catch (error) {
             console.error('Failed to fetch current month data:', error);
+        } finally {
+            setLoaded(true);
         }
     }, [userId]);
 
@@ -42,55 +53,72 @@ const Dashboard = ({ userName, onLogout, userId }: { userName: string; onLogout:
         refreshMonthData();
     }, [refreshMonthData]);
 
+    const today = new Date();
     const spent = currentMonthExpenses?.amount ?? 0;
+    const budget = currentMonthBudget?.available_amount ?? 0;
+    const remaining = budget - spent;
+    const usedRatio = budget > 0 ? spent / budget : 0;
+    const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+    const remainingDays = lastDay - today.getDate() + 1;
 
     return (
         <div>
-            <p>ようこそ、{userName}さん</p>
-            <p>あなたのUserID:{userId}</p>
-
-            <button onClick={onLogout}>ログアウト</button>
-
-            {/* 月の予算情報 */}
-            {currentMonthBudget && (
-                <div style={{ marginTop: '20px', padding: '10px', backgroundColor: '#f0f0f0', borderRadius: '5px' }}>
-                    <h3>今月の予算情報</h3>
-                    <p>設定月: {currentMonthBudget.budget_month}</p>
-                    <p>出費可能額: {currentMonthBudget.available_amount}円</p>
-                    <p>今月の出費: {spent}円</p>
-                    <p style={{ fontSize: '18px', fontWeight: 'bold' }}>残り: {currentMonthBudget.available_amount - spent}円</p>
-                    <p>一日当たり{amountPerDay(currentMonthBudget.available_amount, spent, new Date())}円、使えます。</p>
+            <header className="header">
+                <div>
+                    <h1>ずぼら家計簿</h1>
+                    <div className="user">{userName} さん</div>
                 </div>
-            )}
+                <button className="btn btn-ghost" onClick={onLogout}>ログアウト</button>
+            </header>
 
-            {/* タブボタン */}
-            <div style={{ marginTop: '20px' }}>
-                <button
-                    onClick={() => setActiveTab('history')}
-                    style={{ marginRight: '10px', fontWeight: activeTab === 'history' ? 'bold' : 'normal' }}
-                >
-                    履歴
-                </button>
-                <button
-                    onClick={() => setActiveTab('expenseForm')}
-                    style={{ marginRight: '10px', fontWeight: activeTab === 'expenseForm' ? 'bold' : 'normal' }}
-                >
-                    出費の入力
-                </button>
-                <button
-                    onClick={() => setActiveTab('monthlyBudgets')}
-                    style={{ fontWeight: activeTab === 'monthlyBudgets' ? 'bold' : 'normal' }}
-                >
-                    月の予算設定
-                </button>
-            </div>
+            {/* 今月のサマリー */}
+            <section className="card">
+                {currentMonthBudget ? (
+                    <>
+                        <div className="summary-label">{today.getMonth() + 1}月の残り</div>
+                        <div className={`summary-main${remaining < 0 ? ' negative' : ''}`}>{yen(remaining)}</div>
+                        <div className="summary-perday">
+                            1日あたり <strong>{yen(amountPerDay(budget, spent, today))}</strong> 使えます
+                        </div>
+                        <div className={`progress${usedRatio >= 1 ? ' over' : usedRatio >= 0.8 ? ' warn' : ''}`}>
+                            <div style={{ width: `${Math.min(usedRatio, 1) * 100}%` }} />
+                        </div>
+                        <div className="summary-stats">
+                            <div>予算<b>{yen(budget)}</b></div>
+                            <div>使った額<b>{yen(spent)}</b></div>
+                            <div>残り日数<b>{remainingDays}日</b></div>
+                            <div>消化率<b>{Math.round(usedRatio * 100)}%</b></div>
+                        </div>
+                    </>
+                ) : loaded ? (
+                    <div className="empty-budget">
+                        <p>今月の予算がまだ設定されていません</p>
+                        <button className="btn btn-ghost" onClick={() => setActiveTab('monthlyBudgets')}>予算を設定する</button>
+                    </div>
+                ) : (
+                    <div className="empty-budget">読み込み中…</div>
+                )}
+            </section>
+
+            {/* タブ */}
+            <nav className="tabs" role="tablist">
+                {TABS.map(t => (
+                    <button
+                        key={t.key}
+                        role="tab"
+                        aria-selected={activeTab === t.key}
+                        className={`tab${activeTab === t.key ? ' active' : ''}`}
+                        onClick={() => setActiveTab(t.key)}
+                    >
+                        {t.label}
+                    </button>
+                ))}
+            </nav>
 
             {/* タブの内容 */}
-            <div style={{ marginTop: '20px' }}>
-                {activeTab === 'history' && <History userId={userId} onRefresh={refreshMonthData} />}
-                {activeTab === 'expenseForm' && <ExpenseForm userId={userId} onAddExpense={refreshMonthData} />}
-                {activeTab === 'monthlyBudgets' && <MonthlyBudgets onAddMonthlyBudets={refreshMonthData} userId={userId} />}
-            </div>
+            {activeTab === 'history' && <History userId={userId} onRefresh={refreshMonthData} />}
+            {activeTab === 'expenseForm' && <ExpenseForm userId={userId} onAddExpense={refreshMonthData} />}
+            {activeTab === 'monthlyBudgets' && <MonthlyBudgets onAddMonthlyBudets={refreshMonthData} userId={userId} />}
         </div>
     );
 };
@@ -140,20 +168,29 @@ function App() {
             <Routes>
                 <Route path="/login" element={
                     !isLoggedIn ? (
-                        <>
-                            <div>ログインしてください</div>
+                        <div className="auth">
+                            <div className="brand">
+                                <h1>ずぼら家計簿</h1>
+                                <p>今月あと1日いくら使えるかがすぐわかる</p>
+                            </div>
                             <Login setUserName={setUserName} setIsLoggedIn={setIsLoggedIn} setUserId={setUserId} />
-                            <p>
-                                <a href="https://kakeibobackend-t7v7.onrender.com/" target="_blank" rel="noreferrer">
-                                    応答がない場合バックエンドにアクセスしてみてください。
-                                </a>
+                            <p className="auth-footer">
+                                応答がない場合は<a href="https://kakeibobackend-t7v7.onrender.com/" target="_blank" rel="noreferrer">サーバーを起動</a>してから再度お試しください
                             </p>
-                        </>
+                        </div>
                     ) : (
                         <Navigate to="/dashboard" />
                     )
                 } />
-                <Route path="/signup" element={<SignUpForm />} />
+                <Route path="/signup" element={
+                    <div className="auth">
+                        <div className="brand">
+                            <h1>ずぼら家計簿</h1>
+                            <p>アカウントを作成</p>
+                        </div>
+                        <SignUpForm />
+                    </div>
+                } />
                 <Route path="/dashboard" element={
                     isLoggedIn && userId && userName ? (
                         <Dashboard userName={userName} onLogout={handleLogout} userId={userId} />

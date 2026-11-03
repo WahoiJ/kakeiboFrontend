@@ -51,30 +51,36 @@ const Login: React.FC<LoginProps> = ({ setUserName, setIsLoggedIn, setUserId }) 
   };
 
   return (
-    <div>
-      <h2>ログイン</h2>
-      <form onSubmit={handleSubmit}>
-        <div>
-          <label>ユーザー名:</label>
+    <div className="card">
+      <h2 className="card-title">ログイン</h2>
+      <form className="form" onSubmit={handleSubmit}>
+        <div className="field">
+          <label htmlFor="login-user">ユーザー名</label>
           <input
+            id="login-user"
             type="text"
+            autoComplete="username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             required
           />
         </div>
-        <div>
-          <label>パスワード:</label>
+        <div className="field">
+          <label htmlFor="login-pass">パスワード</label>
           <input
+            id="login-pass"
             type="password"
+            autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
           />
         </div>
-        {error && <p style={{ color: 'red' }}>{error}</p>}
-        <button type="submit" disabled={isSending}>ログイン</button>
-        <Link to="/signup">登録する</Link>
+        {error && <p className="msg-error">{error}</p>}
+        <button className="btn btn-primary" type="submit" disabled={isSending}>
+          {isSending ? 'ログイン中…' : 'ログイン'}
+        </button>
+        <p className="auth-footer">アカウントをお持ちでない方は <Link to="/signup">新規登録</Link></p>
       </form>
     </div>
   );
