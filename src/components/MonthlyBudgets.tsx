@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { apiFetch, currentMonthString, errorMessage, yen, type MonthlyBudget } from "../api";
+import { apiFetch, currentMonthString, errorMessage, OUTDATED_SERVER_MESSAGE, yen, type MonthlyBudget } from "../api";
+import { SLOW_SERVER_MESSAGE, useSlow } from "../useSlow";
 import { FixedCostEditor } from "./FixedCostEditor";
 import { itemsFromBudget, itemsToPayload, newRow, type FixedCostRow } from "../fixedCosts";
 import { calcTakeHome } from "../takeHome";
@@ -56,7 +57,8 @@ export const MonthlyBudgets: React.FC<MonthlyBudgetsFormProps> = ({ onAddMonthly
     const thisMonth = currentMonthString();
     // 設定月と「額面から計算」の入力は月をまたいで下書き保存する
     const [settings] = useState(() => loadDraft<BudgetSettingsDraft>(userId, 'budget-settings'));
-    const [budgetMonthValue, setBudgetMonthValue] = useState<string>(settings?.month || thisMonth); // YYYY-MM
+    // 設定月は毎回今月から開く（前回の月を覚えていると、別の月を今月と勘違いして編集してしまうため）
+    const [budgetMonthValue, setBudgetMonthValue] = useState<string>(thisMonth); // YYYY-MM
     const [form, setForm] = useState<BudgetForm>(emptyForm);
     const [prefillNote, setPrefillNote] = useState<string | null>(null);
     const [restored, setRestored] = useState(false);
@@ -67,6 +69,8 @@ export const MonthlyBudgets: React.FC<MonthlyBudgetsFormProps> = ({ onAddMonthly
     const [grossOpen, setGrossOpen] = useState<boolean>(settings?.grossOpen ?? false);
     const [budgets, setBudgets] = useState<MonthlyBudget[]>([]);
     const [loaded, setLoaded] = useState(false);
+    const [loadError, setLoadError] = useState<string | null>(null);
+    const slowLoading = useSlow(!loaded);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
     const [isSending, setIsSending] = useState(false);
@@ -91,13 +95,14 @@ export const MonthlyBudgets: React.FC<MonthlyBudgetsFormProps> = ({ onAddMonthly
 
     const fetchBudgets = useCallback(async () => {
         if (!userId || userId === 'undefined') return;
+        setLoadError(null);
         try {
             setBudgets(await apiFetch<MonthlyBudget[]>(`/api/budgets?userId=${Number(userId)}`));
-        } catch (err) {
-            console.error('Failed to fetch budgets:', err);
-            setError(errorMessage(err, '予算の取得に失敗しました'));
-        } finally {
             setLoaded(true);
+        } catch (err) {
+            // 読み込めないままフォームを出すと、空の内容で上書き保存してしまうのでフォームは出さない
+            console.error('Failed to fetch budgets:', err);
+            setLoadError(errorMessage(err, '予算の取得に失敗しました'));
         }
     }, [userId]);
 
@@ -187,6 +192,11 @@ export const MonthlyBudgets: React.FC<MonthlyBudgetsFormProps> = ({ onAddMonthly
                 method: 'POST',
                 body: JSON.stringify({ user_id: Number(userId), budget_month: budgetMonthValue, ...body }),
             });
+            if (mode === 'reverse' && (newBudget.income == null || newBudget.available_amount == null)) {
+                // 古いサーバーは収入・固定費を保存できない（入力内容は下書きとして残す）
+                setError(OUTDATED_SERVER_MESSAGE);
+                return;
+            }
             clearDraft(userId, draftName);
             setRestored(false);
             setSuccess(`${formatMonth(newBudget.budget_month)}の予算を ${yen(newBudget.available_amount)} で保存しました`);
@@ -219,6 +229,22 @@ export const MonthlyBudgets: React.FC<MonthlyBudgetsFormProps> = ({ onAddMonthly
         </div>
     );
 
+    if (!loaded) {
+        return (
+            <section className="card">
+                <h2 className="card-title">月の予算を設定する</h2>
+                {loadError ? (
+                    <>
+                        <p className="msg-error">{loadError}</p>
+                        <button type="button" className="btn btn-ghost" onClick={fetchBudgets}>もう一度読み込む</button>
+                    </>
+                ) : (
+                    <p className="empty">{slowLoading ? SLOW_SERVER_MESSAGE : '読み込み中…'}</p>
+                )}
+            </section>
+        );
+    }
+
     return (
         <section className="card">
             <h2 className="card-title">月の予算を設定する</h2>
@@ -229,11 +255,17 @@ export const MonthlyBudgets: React.FC<MonthlyBudgetsFormProps> = ({ onAddMonthly
                         id="budget-month"
                         type="month"
                         value={budgetMonthValue}
-                        onChange={(e) => { setBudgetMonthValue(e.target.value); setSuccess(null); saveSettings({ month: e.target.value }); }}
+                        onChange={(e) => { setBudgetMonthValue(e.target.value); setSuccess(null); }}
                         required
                     />
                 </div>
 
+                {budgetMonthValue !== thisMonth && (
+                    <div className="draft-note">
+                        <span>今月ではなく{formatMonth(budgetMonthValue)}の予算を編集しています</span>
+                        <button type="button" className="btn btn-ghost" onClick={() => { setBudgetMonthValue(thisMonth); setSuccess(null); }}>今月に戻す</button>
+                    </div>
+                )}
                 {restored && (
                     <div className="draft-note">
                         <span>保存していない入力があります</span>

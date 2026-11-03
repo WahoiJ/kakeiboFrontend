@@ -106,3 +106,25 @@ export function currentMonthString(d: Date = new Date()): string {
 export function yen(n: number): string {
     return `${Math.round(n).toLocaleString('ja-JP')}円`;
 }
+
+/** このフロントエンドが必要とするバックエンドの API バージョン（backend の VersionController.API_VERSION） */
+export const REQUIRED_API_VERSION = 5;
+
+/**
+ * バックエンドのバージョンを確認する。
+ * 'ok' / 'outdated'（古いサーバーが動いている）/ 'unknown'（通信できない）
+ */
+export async function checkServerVersion(): Promise<'ok' | 'outdated' | 'unknown'> {
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/version`);
+        if (res.status === 404) return 'outdated';
+        if (!res.ok) return 'unknown';
+        const data = await res.json() as { apiVersion?: number };
+        return (data.apiVersion ?? 0) >= REQUIRED_API_VERSION ? 'ok' : 'outdated';
+    } catch {
+        return 'unknown';
+    }
+}
+
+export const OUTDATED_SERVER_MESSAGE =
+    'サーバー（バックエンド）が古いバージョンのまま動いています。予算・固定費・カテゴリなどが正しく保存されません。Render のバックエンドのデプロイ状況を確認してください。';

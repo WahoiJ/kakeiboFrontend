@@ -5,7 +5,7 @@ import SignUpForm from "./components/SignUpForm";
 import { MonthlyBudgets } from "./components/MonthlyBudgets";
 import { History } from "./components/History";
 import { ExpenseForm } from "./components/ExpenseForm";
-import { apiFetch, AUTH_EXPIRED_EVENT, currentMonthString, todayString, yen, type DailyExpense, type MonthlyBudget, type MonthlyExpenses } from "./api";
+import { apiFetch, AUTH_EXPIRED_EVENT, checkServerVersion, OUTDATED_SERVER_MESSAGE, currentMonthString, todayString, yen, type DailyExpense, type MonthlyBudget, type MonthlyExpenses } from "./api";
 import { clearAllDrafts, loadDraft, saveDraft } from "./draft";
 import { SLOW_SERVER_MESSAGE, useSlow } from "./useSlow";
 
@@ -29,6 +29,12 @@ const Dashboard = ({ userName, onLogout, userId }: { userName: string; onLogout:
     };
     const [carriedFrom, setCarriedFrom] = useState<string | null>(null);
     const [spentToday, setSpentToday] = useState(0);
+    const [serverOutdated, setServerOutdated] = useState(false);
+
+    // サーバーが古いままデプロイされていないかを確認する
+    useEffect(() => {
+        checkServerVersion().then(v => setServerOutdated(v === 'outdated'));
+    }, []);
     const [currentMonthBudget, setCurrentMonthBudget] = useState<MonthlyBudget | null>(null);
     const [currentMonthExpenses, setCurrentMonthExpenses] = useState<MonthlyExpenses | null>(null);
     const [loaded, setLoaded] = useState(false);
@@ -68,7 +74,8 @@ const Dashboard = ({ userName, onLogout, userId }: { userName: string; onLogout:
                     setCarriedFrom(previous.budget_month);
                 }
             }
-            setCurrentMonthBudget(current);
+            // 使える金額が保存されていない（古いサーバーで保存された等）データは未設定として扱う
+            setCurrentMonthBudget(current && current.available_amount != null ? current : null);
             setCurrentMonthExpenses(expenses.find(e => e.budget_month === month) ?? null);
         } catch (error) {
             console.error('Failed to fetch current month data:', error);
@@ -107,6 +114,8 @@ const Dashboard = ({ userName, onLogout, userId }: { userName: string; onLogout:
                 </div>
                 <button className="btn btn-ghost" onClick={onLogout}>ログアウト</button>
             </header>
+
+            {serverOutdated && <p className="msg-error banner" role="alert">{OUTDATED_SERVER_MESSAGE}</p>}
 
             {/* 今月のサマリー */}
             <section className="card">
