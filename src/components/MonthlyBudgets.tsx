@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { apiFetch, currentMonthString, errorMessage, yen, type MonthlyBudget } from "../api";
+import { FixedCostEditor } from "./FixedCostEditor";
+import { itemsFromBudget, itemsToPayload, newRow, type FixedCostRow } from "../fixedCosts";
 import { calcTakeHome } from "../takeHome";
 
 interface MonthlyBudgetsFormProps {
@@ -26,7 +28,7 @@ export const MonthlyBudgets: React.FC<MonthlyBudgetsFormProps> = ({ onAddMonthly
     const [budgetMonthValue, setBudgetMonthValue] = useState<string>(thisMonth); // YYYY-MM
     const [mode, setMode] = useState<Mode>('reverse');
     const [income, setIncome] = useState<string>('');
-    const [fixedCosts, setFixedCosts] = useState<string>('');
+    const [fixedRows, setFixedRows] = useState<FixedCostRow[]>([newRow()]);
     const [savingsGoal, setSavingsGoal] = useState<string>('');
     const [directAmount, setDirectAmount] = useState<string>('');
     const [prefillNote, setPrefillNote] = useState<string | null>(null);
@@ -61,7 +63,7 @@ export const MonthlyBudgets: React.FC<MonthlyBudgetsFormProps> = ({ onAddMonthly
             const reverse = selected.income != null;
             setMode(reverse ? 'reverse' : 'direct');
             setIncome(toInput(selected.income));
-            setFixedCosts(toInput(selected.fixed_costs));
+            setFixedRows(itemsFromBudget(selected));
             setSavingsGoal(toInput(selected.savings_goal));
             setDirectAmount(toInput(selected.available_amount));
             setPrefillNote(null);
@@ -72,14 +74,14 @@ export const MonthlyBudgets: React.FC<MonthlyBudgetsFormProps> = ({ onAddMonthly
             .sort((a, b) => b.budget_month.localeCompare(a.budget_month))[0];
         setMode('reverse');
         setIncome(toInput(previous?.income));
-        setFixedCosts(toInput(previous?.fixed_costs));
+        setFixedRows(itemsFromBudget(previous));
         setSavingsGoal(toInput(previous?.savings_goal));
         setDirectAmount('');
         setPrefillNote(previous ? `${formatMonth(previous.budget_month)}の設定を入れています` : null);
     }, [budgetMonthValue, selected, budgets]);
 
     const incomeNum = Number(income) || 0;
-    const fixedNum = Number(fixedCosts) || 0;
+    const fixedNum = fixedRows.reduce((a, r) => a + (Number(r.amount) || 0), 0);
     const savingsNum = Number(savingsGoal) || 0;
     const computed = incomeNum - fixedNum - savingsNum;
     const available = mode === 'reverse' ? computed : Number(directAmount) || 0;
@@ -104,7 +106,7 @@ export const MonthlyBudgets: React.FC<MonthlyBudgetsFormProps> = ({ onAddMonthly
         setIsSending(true);
         try {
             const body = mode === 'reverse'
-                ? { income: incomeNum, fixed_costs: fixedNum, savings_goal: savingsNum }
+                ? { income: incomeNum, fixed_cost_items: itemsToPayload(fixedRows), savings_goal: savingsNum }
                 : { available_amount: Number(directAmount) };
             const newBudget = await apiFetch<MonthlyBudget>('/api/budgets', {
                 method: 'POST',
@@ -201,7 +203,7 @@ export const MonthlyBudgets: React.FC<MonthlyBudgetsFormProps> = ({ onAddMonthly
                                 )}
                             </div>
                         </details>
-                        {moneyField('budget-fixed', '固定費', fixedCosts, setFixedCosts, '家賃・光熱費・通信費・サブスクなど毎月決まって出ていくお金')}
+                        <FixedCostEditor rows={fixedRows} onChange={setFixedRows} />
                         {moneyField('budget-savings', '貯めたい額', savingsGoal, setSavingsGoal)}
 
                         <div className="calc">

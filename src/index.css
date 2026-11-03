@@ -225,3 +225,23 @@ a:hover { text-decoration: underline; }
 .gross-body { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
 .check { display: flex; align-items: center; gap: 8px; font-size: .9rem; }
 .check input { width: 18px; height: 18px; accent-color: var(--primary); }
+
+/* ---------- 固定費の項目入力 ---------- */
+.fixed-costs { border: none; padding: 0; margin: 0; min-width: 0; }
+.fixed-costs legend { font-size: .875rem; font-weight: 600; color: var(--muted); padding: 0; margin-bottom: 6px; }
+.fixed-list { list-style: none; padding: 0; margin: 4px 0 0; display: flex; flex-direction: column; gap: 8px; }
+.fixed-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 6px; align-items: center; }
+.fixed-row input {
+  font: inherit; font-size: 1rem; color: var(--text); background: var(--bg);
+  border: 1px solid var(--border); border-radius: 10px; padding: 10px; width: 100%; min-width: 0;
+}
+.fixed-row input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+.icon-btn { padding: 6px 10px; font-size: 1.1rem; line-height: 1; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.chip {
+  appearance: none; font: inherit; font-size: .8rem; color: var(--primary);
+  background: var(--primary-soft); border: none; border-radius: 999px; padding: 4px 10px; cursor: pointer;
+}
+.fixed-total { display: flex; justify-content: space-between; margin-top: 8px; font-size: .9rem; color: var(--muted); }
+.fixed-total b { color: var(--text); }
+.summary-items { margin-top: 4px; }

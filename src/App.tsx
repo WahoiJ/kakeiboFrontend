@@ -92,6 +92,11 @@ const Dashboard = ({ userName, onLogout, userId }: { userName: string; onLogout:
                         {currentMonthBudget.income != null && (
                             <div className="summary-breakdown">
                                 収入 {yen(currentMonthBudget.income)} − 固定費 {yen(currentMonthBudget.fixed_costs ?? 0)} − 貯めたい額 {yen(currentMonthBudget.savings_goal ?? 0)}
+                                {currentMonthBudget.fixed_cost_items && currentMonthBudget.fixed_cost_items.length > 0 && (
+                                    <div className="summary-items">
+                                        固定費の内訳: {currentMonthBudget.fixed_cost_items.map(i => `${i.name} ${yen(i.amount)}`).join('、')}
+                                    </div>
+                                )}
                             </div>
                         )}
                     </>

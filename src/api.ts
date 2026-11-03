@@ -9,6 +9,11 @@ export type DailyExpense = {
     amount: number;
 };
 
+export type FixedCostItem = {
+    name: string;
+    amount: number;
+};
+
 export type MonthlyBudget = {
     user_id: number;
     budget_month: string;
@@ -16,6 +21,8 @@ export type MonthlyBudget = {
     /** 逆算モードのときのみ値が入る（直接入力の場合は null） */
     income?: number | null;
     fixed_costs?: number | null;
+    /** 固定費の内訳（合計だけ入力した古いデータは null） */
+    fixed_cost_items?: FixedCostItem[] | null;
     savings_goal?: number | null;
 };
 
