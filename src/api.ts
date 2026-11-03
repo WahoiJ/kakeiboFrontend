@@ -7,6 +7,8 @@ export type DailyExpense = {
     user_id: number;
     expense_date: string | null;
     amount: number;
+    /** カテゴリ。未指定（古いデータ含む）は null */
+    category?: string | null;
 };
 
 export type FixedCostItem = {

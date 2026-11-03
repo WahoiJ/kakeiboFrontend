@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { ExpenseEditRow } from "./ExpenseEditRow";
 import { loadDraft, saveDraft } from "../draft";
+import { categoryOf } from "../categories";
 import { apiFetch, currentMonthString, errorMessage, todayString, yen, type DailyExpense } from "../api";
 
 interface HistoryProps {
@@ -37,7 +39,7 @@ const PERIOD_OPTIONS: { key: PeriodKey; label: string }[] = [
     { key: 'range', label: '期間を指定' },
 ];
 
-type PeriodFilter = { period: PeriodKey; periodMonth: string; rangeFrom: string; rangeTo: string };
+type PeriodFilter = { period: PeriodKey; periodMonth: string; rangeFrom: string; rangeTo: string; category?: string };
 
 const daysAgo = (n: number): string => {
     const d = new Date();
@@ -93,6 +95,10 @@ const formatMonth = (month: string): string => {
 };
 
 export const History: React.FC<HistoryProps> = ({ userId, onRefresh }) => {
+    const [editingId, setEditingId] = useState<number | null>(null);
+    // 直前に削除した出費（「元に戻す」用）
+    const [undo, setUndo] = useState<DailyExpense | null>(null);
+    const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [expenses, setExpenses] = useState<DailyExpense[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
@@ -104,9 +110,11 @@ export const History: React.FC<HistoryProps> = ({ userId, onRefresh }) => {
     const [periodMonth, setPeriodMonth] = useState<string>(savedFilter?.periodMonth || currentMonthString());
     const [rangeFrom, setRangeFrom] = useState<string>(savedFilter?.rangeFrom ?? daysAgo(29));
     const [rangeTo, setRangeTo] = useState<string>(savedFilter?.rangeTo ?? todayString());
+    const [category, setCategory] = useState<string>(savedFilter?.category ?? ''); // '' はすべて
 
     const updateFilter = (patch: Partial<PeriodFilter>) => {
-        const next = { period, periodMonth, rangeFrom, rangeTo, ...patch };
+        const next = { period, periodMonth, rangeFrom, rangeTo, category, ...patch };
+        if (patch.category !== undefined) setCategory(patch.category);
         if (patch.period !== undefined) setPeriod(patch.period);
         if (patch.periodMonth !== undefined) setPeriodMonth(patch.periodMonth);
         if (patch.rangeFrom !== undefined) setRangeFrom(patch.rangeFrom);
@@ -140,16 +148,57 @@ export const History: React.FC<HistoryProps> = ({ userId, onRefresh }) => {
             .finally(() => setLoading(false));
     }, [userId]);
 
-    const handleDeleteExpense = async (expenseId: number) => {
+    const showUndo = (expense: DailyExpense | null) => {
+        if (undoTimer.current) clearTimeout(undoTimer.current);
+        setUndo(expense);
+        if (expense) undoTimer.current = setTimeout(() => setUndo(null), 6000);
+    };
+
+    useEffect(() => () => { if (undoTimer.current) clearTimeout(undoTimer.current); }, []);
+
+    const handleDeleteExpense = async (expense: DailyExpense) => {
+        setError(null);
+        // 先に一覧から消して、すぐ反応したように見せる
+        setExpenses(prev => prev.filter(e => e.expense_id !== expense.expense_id));
+        setEditingId(null);
         try {
             // 月別出費の合計はバックエンドで自動再計算される
-            await apiFetch<void>(`/api/expenses/${expenseId}`, { method: 'DELETE' });
-            setExpenses(prev => prev.filter(expense => expense.expense_id !== expenseId));
+            await apiFetch<void>(`/api/expenses/${expense.expense_id}`, { method: 'DELETE' });
+            showUndo(expense);
             onRefresh?.();
         } catch (err) {
             console.error('Delete error:', err);
+            setExpenses(prev => [...prev, expense]);
             setError(errorMessage(err, '削除に失敗しました'));
         }
+    };
+
+    /** 削除を取り消す（同じ内容で登録し直す） */
+    const handleUndo = async () => {
+        if (!undo) return;
+        const target = undo;
+        showUndo(null);
+        try {
+            const restored = await apiFetch<DailyExpense>('/api/expenses', {
+                method: 'POST',
+                body: JSON.stringify({
+                    user_id: Number(userId),
+                    expense_date: target.expense_date,
+                    amount: target.amount,
+                    category: target.category ?? null,
+                }),
+            });
+            setExpenses(prev => [...prev, restored]);
+            onRefresh?.();
+        } catch (err) {
+            setError(errorMessage(err, '元に戻せませんでした'));
+        }
+    };
+
+    const handleSaved = (updated: DailyExpense) => {
+        setExpenses(prev => prev.map(e => (e.expense_id === updated.expense_id ? updated : e)));
+        setEditingId(null);
+        onRefresh?.();
     };
 
     const month = currentMonthString();
@@ -159,11 +208,24 @@ export const History: React.FC<HistoryProps> = ({ userId, onRefresh }) => {
 
     // 期間で絞り込み（日付は YYYY-MM-DD なので文字列比較でよい）
     const [start, end] = periodRange(period, periodMonth, rangeFrom, rangeTo);
-    const filtered = expenses.filter(e => {
+    const inPeriod = expenses.filter(e => {
         if (start === null && end === null) return true;
         if (!e.expense_date) return false;
         return (start === null || e.expense_date >= start) && (end === null || e.expense_date <= end);
     });
+
+    // 期間内のカテゴリ別合計（金額の大きい順）
+    const periodTotal = inPeriod.reduce((a, b) => a + b.amount, 0);
+    const byCategory = Object.entries(
+        inPeriod.reduce<Record<string, { total: number; count: number }>>((acc, e) => {
+            const c = categoryOf(e.category);
+            acc[c] = { total: (acc[c]?.total ?? 0) + e.amount, count: (acc[c]?.count ?? 0) + 1 };
+            return acc;
+        }, {}),
+    ).sort((a, b) => b[1].total - a[1].total);
+
+    // カテゴリで絞り込み
+    const filtered = category ? inPeriod.filter(e => categoryOf(e.category) === category) : inPeriod;
     const filteredTotal = filtered.reduce((a, b) => a + b.amount, 0);
     const periodLabel =
         period === 'month' ? (periodMonth ? formatMonth(periodMonth) : '指定月')
@@ -233,20 +295,55 @@ export const History: React.FC<HistoryProps> = ({ userId, onRefresh }) => {
                 )}
             </div>
             <div className="totals">
-                <div className="total-box"><span>今月の合計</span><b>{yen(monthTotal)}</b></div>
+                {/* 期間が「今月」で絞り込みなしのときは右と同じ内容になるので出さない */}
+                {!(period === 'thisMonth' && !category) && (
+                    <div className="total-box"><span>今月の合計</span><b>{yen(monthTotal)}</b></div>
+                )}
                 <div className="total-box">
-                    <span>{periodLabel}の合計（{filtered.length}件）</span>
+                    <span>{periodLabel}{category ? `・${category}` : ''}の合計（{filtered.length}件）</span>
                     <b>{yen(filteredTotal)}</b>
                 </div>
             </div>
             {invalidRange && <p className="msg-error">開始日は終了日より前にしてください</p>}
+            {byCategory.length > 0 && (
+                <div className="category-breakdown">
+                    <div className="category-breakdown-head">
+                        <span>カテゴリ別（タップで絞り込み）</span>
+                        {category && (
+                            <button type="button" className="link-btn" onClick={() => updateFilter({ category: '' })}>すべて表示</button>
+                        )}
+                    </div>
+                    <ul>
+                        {byCategory.map(([name, v]) => {
+                            const ratio = periodTotal > 0 ? v.total / periodTotal : 0;
+                            return (
+                                <li key={name}>
+                                    <button
+                                        type="button"
+                                        className={`category-row${category === name ? ' selected' : ''}`}
+                                        aria-pressed={category === name}
+                                        onClick={() => updateFilter({ category: category === name ? '' : name })}
+                                    >
+                                        <span className="category-name">{name}</span>
+                                        <span className="category-bar"><span style={{ width: `${ratio * 100}%` }} /></span>
+                                        <span className="category-amount">{yen(v.total)}</span>
+                                        <span className="category-ratio">{Math.round(ratio * 100)}%</span>
+                                    </button>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                </div>
+            )}
             {error && <p className="msg-error">{error}</p>}
             {loading ? (
                 <p className="empty">読み込み中…</p>
             ) : expenses.length === 0 ? (
                 <p className="empty">出費がありません</p>
-            ) : filtered.length === 0 ? (
+            ) : inPeriod.length === 0 ? (
                 <p className="empty">この期間の出費はありません</p>
+            ) : filtered.length === 0 ? (
+                <p className="empty">この期間に「{category}」の出費はありません</p>
             ) : (
                 <ul className="history-list">
                     {groups.map(g => (
@@ -258,25 +355,41 @@ export const History: React.FC<HistoryProps> = ({ userId, onRefresh }) => {
                                 </li>
                             )}
                             {g.items.map(expense => (
-                                <li key={expense.expense_id} className="history-item">
-                                    <span className="history-date">{formatDate(expense.expense_date, !byDate)}</span>
-                                    <span className="history-amount">{yen(expense.amount)}</span>
-                                    <button
-                                        className="btn btn-danger"
-                                        aria-label={`${expense.expense_date}の${expense.amount}円を削除`}
-                                        onClick={() => {
-                                            if (window.confirm(`${expense.expense_date}の${yen(expense.amount)}を削除しますか？`)) {
-                                                handleDeleteExpense(expense.expense_id);
-                                            }
-                                        }}
-                                    >
-                                        削除
-                                    </button>
-                                </li>
+                                editingId === expense.expense_id ? (
+                                    <li key={expense.expense_id} className="history-edit">
+                                        <ExpenseEditRow
+                                            userId={userId}
+                                            expense={expense}
+                                            onSaved={handleSaved}
+                                            onCancel={() => setEditingId(null)}
+                                            onDelete={() => handleDeleteExpense(expense)}
+                                        />
+                                    </li>
+                                ) : (
+                                    <li key={expense.expense_id} className="history-item">
+                                        <button
+                                            type="button"
+                                            className="history-row"
+                                            aria-label={`${expense.expense_date}の${categoryOf(expense.category)} ${expense.amount}円を編集`}
+                                            onClick={() => setEditingId(expense.expense_id)}
+                                        >
+                                            <span className="history-date">{formatDate(expense.expense_date, !byDate)}</span>
+                                            <span className={`category-badge${expense.category ? '' : ' none'}`}>{categoryOf(expense.category)}</span>
+                                            <span className="history-amount">{yen(expense.amount)}</span>
+                                            <span className="history-chevron" aria-hidden="true">›</span>
+                                        </button>
+                                    </li>
+                                )
                             ))}
                         </React.Fragment>
                     ))}
                 </ul>
+            )}
+            {undo && (
+                <div className="toast" role="status">
+                    <span>{undo.category ? `「${undo.category}」` : ''}{yen(undo.amount)}を削除しました</span>
+                    <button type="button" className="link-btn" onClick={handleUndo}>元に戻す</button>
+                </div>
             )}
         </section>
     );

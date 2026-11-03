@@ -35,7 +35,7 @@ type BudgetForm = {
 /** 下書きとして保存する形（行の id は保存しない） */
 type BudgetFormDraft = Omit<BudgetForm, 'fixedRows'> & { fixedRows: { name: string; amount: string }[] };
 
-type BudgetSettingsDraft = { month: string; gross: string; over40: boolean; residentTax: string };
+type BudgetSettingsDraft = { month: string; gross: string; over40: boolean; residentTax: string; grossOpen?: boolean };
 
 const emptyForm = (): BudgetForm => ({ mode: 'reverse', income: '', fixedRows: [newRow()], savingsGoal: '', directAmount: '' });
 
@@ -63,6 +63,8 @@ export const MonthlyBudgets: React.FC<MonthlyBudgetsFormProps> = ({ onAddMonthly
     const [gross, setGross] = useState<string>(settings?.gross ?? '');
     const [over40, setOver40] = useState<boolean>(settings?.over40 ?? false);
     const [residentTax, setResidentTax] = useState<string>(settings?.residentTax ?? '');
+    // 「額面から手取りを計算する」の開閉状態も保持し、再描画やリロードで閉じないようにする
+    const [grossOpen, setGrossOpen] = useState<boolean>(settings?.grossOpen ?? false);
     const [budgets, setBudgets] = useState<MonthlyBudget[]>([]);
     const [loaded, setLoaded] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -83,7 +85,7 @@ export const MonthlyBudgets: React.FC<MonthlyBudgetsFormProps> = ({ onAddMonthly
     };
 
     const saveSettings = (patch: Partial<BudgetSettingsDraft>) => {
-        const next = { month: budgetMonthValue, gross, over40, residentTax, ...patch };
+        const next = { month: budgetMonthValue, gross, over40, residentTax, grossOpen, ...patch };
         saveDraft<BudgetSettingsDraft>(userId, 'budget-settings', next);
     };
 
@@ -169,7 +171,7 @@ export const MonthlyBudgets: React.FC<MonthlyBudgetsFormProps> = ({ onAddMonthly
         : null;
 
     const canSubmit = mode === 'reverse'
-        ? income !== '' && computed >= 0
+        ? income !== ''
         : directAmount !== '' && Number(directAmount) >= 0;
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -256,7 +258,14 @@ export const MonthlyBudgets: React.FC<MonthlyBudgetsFormProps> = ({ onAddMonthly
                     <>
                         {prefillNote && <p className="hint">{prefillNote}</p>}
                         {moneyField('budget-income', '収入', income, v => editForm({ income: v }), '手取りの月収')}
-                        <details className="gross-calc">
+                        <details
+                            className="gross-calc"
+                            open={grossOpen}
+                            onToggle={(e) => {
+                                const open = (e.currentTarget as HTMLDetailsElement).open;
+                                if (open !== grossOpen) { setGrossOpen(open); saveSettings({ grossOpen: open }); }
+                            }}
+                        >
                             <summary>額面から手取りを計算する</summary>
                             <div className="gross-body">
                                 {moneyField('budget-gross', '額面（総支給額）', gross, v => { setGross(v); saveSettings({ gross: v }); }, '給与明細の総支給額。会社員・扶養なし・賞与なしの前提で概算します')}
@@ -301,7 +310,9 @@ export const MonthlyBudgets: React.FC<MonthlyBudgetsFormProps> = ({ onAddMonthly
                                 <div className="calc-perday">1日あたり約 <b>{yen(perDay)}</b></div>
                             )}
                         </div>
-                        {computed < 0 && <p className="msg-error">固定費と貯めたい額の合計が収入を超えています</p>}
+                        {computed < 0 && (
+                            <p className="msg-warning">固定費と貯めたい額の合計が収入を超えています。このまま保存すると、使えるお金はマイナスになります</p>
+                        )}
                     </>
                 ) : (
                     moneyField('budget-amount', '使ってよい金額', directAmount, v => editForm({ directAmount: v }),
