@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { loadDraft, saveDraft } from "../draft";
 import { apiFetch, currentMonthString, errorMessage, todayString, yen, type DailyExpense } from "../api";
 
 interface HistoryProps {
@@ -35,6 +36,8 @@ const PERIOD_OPTIONS: { key: PeriodKey; label: string }[] = [
     { key: 'month', label: '月を指定' },
     { key: 'range', label: '期間を指定' },
 ];
+
+type PeriodFilter = { period: PeriodKey; periodMonth: string; rangeFrom: string; rangeTo: string };
 
 const daysAgo = (n: number): string => {
     const d = new Date();
@@ -94,10 +97,22 @@ export const History: React.FC<HistoryProps> = ({ userId, onRefresh }) => {
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [sortKey, setSortKey] = useState<SortKey>(loadSortKey);
-    const [period, setPeriod] = useState<PeriodKey>('all');
-    const [periodMonth, setPeriodMonth] = useState<string>(currentMonthString());
-    const [rangeFrom, setRangeFrom] = useState<string>(daysAgo(29));
-    const [rangeTo, setRangeTo] = useState<string>(todayString());
+    // 期間の絞り込みは下書きとして保存し、タブを切り替えたりリロードしても残す
+    const [savedFilter] = useState(() => loadDraft<PeriodFilter>(userId, 'history-filter'));
+    const [period, setPeriod] = useState<PeriodKey>(
+        PERIOD_OPTIONS.some(o => o.key === savedFilter?.period) ? savedFilter!.period : 'all');
+    const [periodMonth, setPeriodMonth] = useState<string>(savedFilter?.periodMonth || currentMonthString());
+    const [rangeFrom, setRangeFrom] = useState<string>(savedFilter?.rangeFrom ?? daysAgo(29));
+    const [rangeTo, setRangeTo] = useState<string>(savedFilter?.rangeTo ?? todayString());
+
+    const updateFilter = (patch: Partial<PeriodFilter>) => {
+        const next = { period, periodMonth, rangeFrom, rangeTo, ...patch };
+        if (patch.period !== undefined) setPeriod(patch.period);
+        if (patch.periodMonth !== undefined) setPeriodMonth(patch.periodMonth);
+        if (patch.rangeFrom !== undefined) setRangeFrom(patch.rangeFrom);
+        if (patch.rangeTo !== undefined) setRangeTo(patch.rangeTo);
+        saveDraft<PeriodFilter>(userId, 'history-filter', next);
+    };
 
     const handleSortChange = (key: SortKey) => {
         setSortKey(key);
@@ -192,7 +207,7 @@ export const History: React.FC<HistoryProps> = ({ userId, onRefresh }) => {
                         id="history-period"
                         className="select"
                         value={period}
-                        onChange={(e) => setPeriod(e.target.value as PeriodKey)}
+                        onChange={(e) => updateFilter({ period: e.target.value as PeriodKey })}
                     >
                         {PERIOD_OPTIONS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
                     </select>
@@ -200,19 +215,19 @@ export const History: React.FC<HistoryProps> = ({ userId, onRefresh }) => {
                 {period === 'month' && (
                     <div className="field">
                         <label htmlFor="history-month">月</label>
-                        <input id="history-month" type="month" value={periodMonth} onChange={(e) => setPeriodMonth(e.target.value)} />
+                        <input id="history-month" type="month" value={periodMonth} onChange={(e) => updateFilter({ periodMonth: e.target.value })} />
                     </div>
                 )}
                 {period === 'range' && (
                     <div className="range">
                         <div className="field">
                             <label htmlFor="history-from">開始日</label>
-                            <input id="history-from" type="date" value={rangeFrom} max={rangeTo || undefined} onChange={(e) => setRangeFrom(e.target.value)} />
+                            <input id="history-from" type="date" value={rangeFrom} max={rangeTo || undefined} onChange={(e) => updateFilter({ rangeFrom: e.target.value })} />
                         </div>
                         <span className="range-sep">〜</span>
                         <div className="field">
                             <label htmlFor="history-to">終了日</label>
-                            <input id="history-to" type="date" value={rangeTo} min={rangeFrom || undefined} onChange={(e) => setRangeTo(e.target.value)} />
+                            <input id="history-to" type="date" value={rangeTo} min={rangeFrom || undefined} onChange={(e) => updateFilter({ rangeTo: e.target.value })} />
                         </div>
                     </div>
                 )}
