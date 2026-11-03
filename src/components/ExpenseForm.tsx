@@ -1,46 +1,64 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { apiFetch, errorMessage, todayString, yen, type DailyExpense } from "../api";
 import { clearDraft, loadDraft, saveDraft } from "../draft";
+import { CategoryPicker } from "./CategoryPicker";
+import { DateQuickPicker } from "./DateQuickPicker";
 
 interface ExpenseFormProps {
     userId: string;
     onAddExpense?: (newExpense: DailyExpense) => void;
 }
 
-type ExpenseDraft = { amount: string; date: string; savedOn: string };
+type ExpenseDraft = { amount: string; date: string; category?: string; savedOn: string };
 
 /** 下書きを読み込む。日付は「今日入力した下書き」のときだけ復元し、翌日以降は今日にする */
-const initialDraft = (userId: string): { amount: string; date: string } => {
+const initialDraft = (userId: string): { amount: string; date: string; category: string } => {
     const today = todayString();
+    const lastCategory = loadDraft<string>(userId, 'last-category') ?? '';
     const draft = loadDraft<ExpenseDraft>(userId, 'expense');
     if (draft) {
-        return { amount: draft.amount ?? '', date: draft.savedOn === today && draft.date ? draft.date : today };
+        return {
+            amount: draft.amount ?? '',
+            date: draft.savedOn === today && draft.date ? draft.date : today,
+            category: draft.category ?? lastCategory,
+        };
     }
     // 旧バージョンの一時保存（tempMoney）があれば引き継ぐ
     const legacy = localStorage.getItem('tempMoney');
     if (legacy) {
         localStorage.removeItem('tempMoney');
-        return { amount: Number(legacy) > 0 ? legacy : '', date: today };
+        return { amount: Number(legacy) > 0 ? legacy : '', date: today, category: lastCategory };
     }
-    return { amount: '', date: today };
+    return { amount: '', date: today, category: lastCategory };
 };
 
 export const ExpenseForm: React.FC<ExpenseFormProps> = ({ userId, onAddExpense }) => {
     const [initial] = useState(() => initialDraft(userId));
     const [expenseDate, setExpenseDate] = useState<string>(initial.date);
     const [amount, setAmount] = useState<string>(initial.amount);
+    const [category, setCategory] = useState<string>(initial.category);
     const [isSending, setIsSending] = useState<boolean>(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
     const amountNumber = Number(amount);
+    const amountRef = useRef<HTMLInputElement>(null);
 
-    const update = (next: { amount?: string; date?: string }) => {
+    // 成功メッセージは数秒で消す
+    useEffect(() => {
+        if (message?.type !== 'success') return;
+        const t = setTimeout(() => setMessage(null), 4000);
+        return () => clearTimeout(t);
+    }, [message]);
+
+    const update = (next: { amount?: string; date?: string; category?: string }) => {
         const a = next.amount ?? amount;
         const d = next.date ?? expenseDate;
+        const c = next.category ?? category;
         if (next.amount !== undefined) setAmount(a);
         if (next.date !== undefined) setExpenseDate(d);
+        if (next.category !== undefined) setCategory(c);
         if (a === '' && d === todayString()) clearDraft(userId, 'expense');
-        else saveDraft<ExpenseDraft>(userId, 'expense', { amount: a, date: d, savedOn: todayString() });
+        else saveDraft<ExpenseDraft>(userId, 'expense', { amount: a, date: d, category: c, savedOn: todayString() });
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -56,13 +74,21 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ userId, onAddExpense }
                     user_id: Number(userId),
                     expense_date: expenseDate,
                     amount: amountNumber,
+                    category: category || null,
                 }),
             });
             clearDraft(userId, 'expense');
+            // 次の入力でも同じカテゴリを選んだ状態にしておく
+            saveDraft<string>(userId, 'last-category', category);
             setExpenseDate(todayString());
             setAmount('');
-            setMessage({ type: 'success', text: `${newExpense.expense_date} に ${yen(newExpense.amount)} を追加しました` });
+            setMessage({
+                type: 'success',
+                text: `${newExpense.expense_date} に${newExpense.category ? `「${newExpense.category}」` : ''} ${yen(newExpense.amount)} を追加しました`,
+            });
             onAddExpense?.(newExpense);
+            // 続けて入力できるように金額欄にフォーカスを戻す
+            amountRef.current?.focus();
         } catch (error) {
             // 入力内容は下書きとして残っているので、そのまま再送できる
             console.error('Error adding expense:', error);
@@ -81,6 +107,7 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ userId, onAddExpense }
                     <div className="input-suffix">
                         <input
                             id="expense-amount"
+                            ref={amountRef}
                             type="number"
                             inputMode="numeric"
                             min={1}
@@ -92,16 +119,8 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ userId, onAddExpense }
                         <span>円</span>
                     </div>
                 </div>
-                <div className="field">
-                    <label htmlFor="expense-date">日付</label>
-                    <input
-                        id="expense-date"
-                        type="date"
-                        value={expenseDate}
-                        onChange={(e) => update({ date: e.target.value })}
-                        required
-                    />
-                </div>
+                <CategoryPicker userId={userId} value={category} onChange={(c) => update({ category: c })} />
+                <DateQuickPicker id="expense-date" value={expenseDate} onChange={(d) => update({ date: d })} />
                 {message && <p className={message.type === 'success' ? 'msg-success' : 'msg-error'}>{message.text}</p>}
                 <button className="btn btn-primary" type="submit" disabled={!(amountNumber > 0) || isSending}>
                     {isSending ? '送信中…' : '追加する'}

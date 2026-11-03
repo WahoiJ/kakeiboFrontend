@@ -251,3 +251,66 @@ a:hover { text-decoration: underline; }
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   background: var(--primary-soft); color: var(--primary); border-radius: 8px; padding: 6px 6px 6px 12px; font-size: .85rem;
 }
+
+/* ---------- カテゴリ ---------- */
+.category-field { border: none; padding: 0; margin: 0; min-width: 0; }
+.category-field legend { font-size: .875rem; font-weight: 600; color: var(--muted); padding: 0; margin-bottom: 6px; }
+.category-field .chips { margin-top: 0; }
+.chip-select { color: var(--text); background: var(--bg); border: 1px solid var(--border); padding: 6px 12px; font-size: .875rem; }
+.chip-select.selected { background: var(--primary); border-color: var(--primary); color: #fff; }
+.custom-category { display: flex; gap: 8px; margin-top: 8px; }
+.custom-category input {
+  flex: 1; min-width: 0; font: inherit; font-size: 1rem; color: var(--text); background: var(--bg);
+  border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px;
+}
+.category-badge {
+  font-size: .75rem; color: var(--primary); background: var(--primary-soft);
+  border-radius: 999px; padding: 2px 8px; white-space: nowrap; max-width: 8em; overflow: hidden; text-overflow: ellipsis;
+}
+.category-badge.none { color: var(--muted); background: var(--bg); }
+.category-breakdown { background: var(--bg); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+.category-breakdown-head { display: flex; justify-content: space-between; align-items: center; font-size: .8rem; color: var(--muted); margin-bottom: 4px; }
+.category-breakdown ul { list-style: none; margin: 0; padding: 0; }
+.category-row {
+  appearance: none; width: 100%; display: grid; grid-template-columns: 5.5em 1fr auto 2.8em; gap: 8px; align-items: center;
+  background: transparent; border: none; border-radius: 6px; padding: 6px 4px; font: inherit; font-size: .85rem; color: var(--text); cursor: pointer; text-align: left;
+}
+.category-row:hover { background: var(--surface); }
+.category-row.selected { background: var(--primary-soft); }
+.category-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.category-bar { height: 6px; background: var(--border); border-radius: 999px; overflow: hidden; }
+.category-bar > span { display: block; height: 100%; background: var(--primary); border-radius: 999px; }
+.category-amount { font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
+.category-ratio { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.link-btn { appearance: none; background: none; border: none; color: var(--primary); font: inherit; font-weight: 600; cursor: pointer; padding: 0; }
+.history-item { flex-wrap: nowrap; }
+.msg-warning { color: var(--warning); background: color-mix(in srgb, var(--warning) 12%, transparent); border-radius: 8px; padding: 8px 12px; font-size: .9rem; }
+.negative-note { color: var(--danger); font-weight: 600; }
+.date-quick { display: flex; flex-direction: column; gap: 8px; }
+.date-quick .chips { margin-top: 0; }
+
+/* ---------- 履歴の編集・取り消し ---------- */
+.history-item { padding: 0; }
+.history-row {
+  appearance: none; width: 100%; display: flex; align-items: center; gap: 10px; padding: 12px 2px;
+  background: transparent; border: none; font: inherit; color: var(--text); cursor: pointer; text-align: left;
+}
+.history-row:hover { background: var(--bg); }
+.history-chevron { color: var(--muted); font-size: 1.2rem; line-height: 1; }
+.history-edit { padding: 12px 0; border-bottom: 1px solid var(--border); }
+.edit-form { background: var(--bg); border-radius: 10px; padding: 12px; }
+.edit-form .field input, .edit-form .chip-select:not(.selected) { background: var(--surface); }
+.edit-actions { display: flex; align-items: center; gap: 8px; }
+.edit-actions .spacer { flex: 1; }
+.btn-inline { width: auto; padding: 8px 18px; }
+.toast {
+  position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+  width: min(528px, calc(100% - 32px)); display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  background: var(--text); color: var(--surface); border-radius: 12px; padding: 12px 16px; font-size: .9rem;
+  box-shadow: 0 6px 20px rgba(0,0,0,.25); z-index: 10;
+}
+.toast .link-btn { color: var(--primary-soft); }
+@media (prefers-color-scheme: dark) { .toast .link-btn { color: var(--primary); } }
+.summary-sub { font-size: .8rem; color: var(--muted); margin-top: 2px; }
+.over-note strong { color: var(--danger); }
+.totals > .total-box:only-child { grid-column: 1 / -1; }

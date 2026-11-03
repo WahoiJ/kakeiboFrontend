@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import { Link, useNavigate } from 'react-router-dom';
 import { API_BASE_URL, errorMessage } from '../api';
+import { SLOW_SERVER_MESSAGE, useSlow } from '../useSlow';
 
 interface LoginProps {
   setUserName: (userName: string | null) => void;
@@ -22,6 +23,7 @@ const Login: React.FC<LoginProps> = ({ setUserName, setIsLoggedIn, setUserId }) 
   const [error, setError] = useState('');
   const [isSending, setIsSending] = useState(false);
   const navigate = useNavigate();
+  const slow = useSlow(isSending);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,6 +79,7 @@ const Login: React.FC<LoginProps> = ({ setUserName, setIsLoggedIn, setUserId }) 
           />
         </div>
         {error && <p className="msg-error">{error}</p>}
+        {slow && <p className="hint">{SLOW_SERVER_MESSAGE}</p>}
         <button className="btn btn-primary" type="submit" disabled={isSending}>
           {isSending ? 'ログイン中…' : 'ログイン'}
         </button>

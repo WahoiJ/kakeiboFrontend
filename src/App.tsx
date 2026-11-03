@@ -5,15 +5,9 @@ import SignUpForm from "./components/SignUpForm";
 import { MonthlyBudgets } from "./components/MonthlyBudgets";
 import { History } from "./components/History";
 import { ExpenseForm } from "./components/ExpenseForm";
-import { apiFetch, AUTH_EXPIRED_EVENT, currentMonthString, yen, type MonthlyBudget, type MonthlyExpenses } from "./api";
+import { apiFetch, AUTH_EXPIRED_EVENT, currentMonthString, todayString, yen, type DailyExpense, type MonthlyBudget, type MonthlyExpenses } from "./api";
 import { clearAllDrafts, loadDraft, saveDraft } from "./draft";
-
-/** 今日を含めた残り日数で、1日あたり使える額を計算 */
-const amountPerDay = (budget: number, expenses: number, today: Date): number => {
-    const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-    const remainingDays = lastDay - today.getDate() + 1;
-    return Math.floor((budget - expenses) / remainingDays);
-};
+import { SLOW_SERVER_MESSAGE, useSlow } from "./useSlow";
 
 type Tab = 'history' | 'expenseForm' | 'monthlyBudgets';
 
@@ -34,6 +28,7 @@ const Dashboard = ({ userName, onLogout, userId }: { userName: string; onLogout:
         saveDraft<Tab>(userId, 'tab', tab);
     };
     const [carriedFrom, setCarriedFrom] = useState<string | null>(null);
+    const [spentToday, setSpentToday] = useState(0);
     const [currentMonthBudget, setCurrentMonthBudget] = useState<MonthlyBudget | null>(null);
     const [currentMonthExpenses, setCurrentMonthExpenses] = useState<MonthlyExpenses | null>(null);
     const [loaded, setLoaded] = useState(false);
@@ -45,10 +40,13 @@ const Dashboard = ({ userName, onLogout, userId }: { userName: string; onLogout:
         }
         const month = currentMonthString();
         try {
-            const [budgets, expenses] = await Promise.all([
+            const [budgets, expenses, daily] = await Promise.all([
                 apiFetch<MonthlyBudget[]>(`/api/budgets?userId=${Number(userId)}`),
                 apiFetch<MonthlyExpenses[]>(`/api/monthly-expenses?userId=${Number(userId)}`),
+                apiFetch<DailyExpense[] | null>(`/api/expenses?userId=${Number(userId)}`),
             ]);
+            const today = todayString();
+            setSpentToday((daily ?? []).filter(e => e.expense_date === today).reduce((a, b) => a + b.amount, 0));
             let current = budgets.find(b => b.budget_month === month) ?? null;
             if (!current) {
                 // 今月の予算がなければ、直前に「収入から逆算」で設定した月の内容を自動で引き継いで保存する
@@ -88,9 +86,17 @@ const Dashboard = ({ userName, onLogout, userId }: { userName: string; onLogout:
     const spent = currentMonthExpenses?.amount ?? 0;
     const budget = currentMonthBudget?.available_amount ?? 0;
     const remaining = budget - spent;
-    const usedRatio = budget > 0 ? spent / budget : 0;
+    // 予算が0以下（固定費＋貯めたい額が収入を超えた場合など）は使い切った扱い
+    const usedRatio = budget > 0 ? spent / budget : (budget < 0 || spent > 0 ? 1 : 0);
     const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
     const remainingDays = lastDay - today.getDate() + 1;
+    const slowLoading = useSlow(!loaded);
+
+    // 今日の目安 = 昨日までの残りを今日を含めた残り日数で割った額（今日使っても変わらない）
+    const leftBeforeToday = budget - (spent - spentToday);
+    const dailyAllowance = Math.floor(leftBeforeToday / remainingDays);
+    const todayLeft = dailyAllowance - spentToday;
+    const tomorrowPerDay = remainingDays > 1 ? Math.floor(remaining / (remainingDays - 1)) : 0;
 
     return (
         <div>
@@ -108,9 +114,27 @@ const Dashboard = ({ userName, onLogout, userId }: { userName: string; onLogout:
                     <>
                         <div className="summary-label">{today.getMonth() + 1}月の残り</div>
                         <div className={`summary-main${remaining < 0 ? ' negative' : ''}`}>{yen(remaining)}</div>
-                        <div className="summary-perday">
-                            1日あたり <strong>{yen(amountPerDay(budget, spent, today))}</strong> 使えます
-                        </div>
+                        {leftBeforeToday > 0 && remaining > 0 ? (
+                            <>
+                                {todayLeft >= 0 ? (
+                                    <div className="summary-perday">
+                                        今日あと <strong>{yen(todayLeft)}</strong> 使えます
+                                    </div>
+                                ) : (
+                                    <div className="summary-perday over-note">
+                                        今日は目安を <strong>{yen(-todayLeft)}</strong> 超えています
+                                    </div>
+                                )}
+                                <div className="summary-sub">
+                                    1日の目安 {yen(dailyAllowance)}・今日使った額 {yen(spentToday)}
+                                    {todayLeft < 0 && remainingDays > 1 && <>（明日から1日 {yen(tomorrowPerDay)}）</>}
+                                </div>
+                            </>
+                        ) : (
+                            <div className="summary-perday negative-note">
+                                {budget < 0 ? '固定費と貯めたい額が収入を超えています' : '今月の予算を使い切りました'}
+                            </div>
+                        )}
                         <div className={`progress${usedRatio >= 1 ? ' over' : usedRatio >= 0.8 ? ' warn' : ''}`}>
                             <div style={{ width: `${Math.min(usedRatio, 1) * 100}%` }} />
                         </div>
@@ -142,7 +166,7 @@ const Dashboard = ({ userName, onLogout, userId }: { userName: string; onLogout:
                         <button className="btn btn-ghost" onClick={() => setActiveTab('monthlyBudgets')}>予算を設定する</button>
                     </div>
                 ) : (
-                    <div className="empty-budget">読み込み中…</div>
+                    <div className="empty-budget">{slowLoading ? SLOW_SERVER_MESSAGE : '読み込み中…'}</div>
                 )}
             </section>
 
