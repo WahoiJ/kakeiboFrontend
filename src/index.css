@@ -314,3 +314,4 @@ a:hover { text-decoration: underline; }
 .summary-sub { font-size: .8rem; color: var(--muted); margin-top: 2px; }
 .over-note strong { color: var(--danger); }
 .totals > .total-box:only-child { grid-column: 1 / -1; }
+.banner { margin-bottom: 16px; }
